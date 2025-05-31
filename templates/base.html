@@ -1,47 +1,55 @@
+{# templates/base.html #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Soap | Polling Dashboard</title>
-
-    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
-    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}"> {# For older browsers #}
     
-    <!-- Add Bootstrap or any other CSS framework for styling -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { padding-top: 20px; padding-bottom: 20px; }
-        .tab-button { margin-right: 5px; }
-        .plot-container img { max-width: 100%; height: auto; }
-        details > summary { cursor: pointer; font-weight: bold; margin-top:1rem; margin-bottom:0.5rem; }
-        .table-sm {font-size: 0.85rem;}
-        h1, h2, h3 { margin-top: 1.5rem; margin-bottom: 1rem;}
-        /* Add your custom styles from static/style.css if needed */
-    </style>
+    <title>Soap | Dashboard</title> 
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="icon" href="{{ url_for('favicon') }}" type="image/x-icon">
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QL7EMV1Y4X"></script>
+    <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-QL7EMV1Y4X');
+    </script>
+    {% block head_extra %}{% endblock %}
 </head>
 <body>
-    <div class="container-fluid">
-        <header class="pb-3 mb-4 border-bottom">
-            <h1>SOAP Dashboard</h1>
-            <p>Contribute to the project here: <a href="https://use.soap.fyi" target="_blank">use.soap.fyi</a></p>
-        </header>
+    <!-- Navbar - matching your new index.html structure -->
+    <nav class="navbar">
+        <a href="{{ url_for('dashboard') }}">Home</a>
+        <div class="navbar-title">Soap Dashboard</div>
+        <div class="spacer"></div>
+    </nav>
 
-        {% if not engine_available %}
-            <div class="alert alert-danger" role="alert">
+    <!-- Main content area -->
+    <div class="main-content-wrapper" style="padding: 1rem; flex-grow: 1;">
+        <div class="contribute-link-container" style="margin-bottom: 1.5rem; padding-top: 5px;">
+            <p>Contribute to the project here: <a href="https://use.soap.fyi" target="_blank" style="color: #76B0DF; font-weight: bold;">use.soap.fyi</a></p>
+        </div>
+
+        {% if not engine_available and active_tab is not none %}
+            <section style="background-color: #ffdddd; color: #d8000c; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
               🔴 CRITICAL: Database connection failed. Dashboard cannot operate.
-            </div>
+            </section>
         {% else %}
-            {% block content %}
-            {% endblock %}
+            {% block content %}{% endblock %}
         {% endif %}
-
-        <hr>
-        <footer class="pt-3 mt-4 text-muted border-top">
-            © Copyright 2024-2025 <a href="https://soap.fyi">soap.fyi</a>. All rights reserved.
-        </footer>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>© Copyright 2024-2025 <a class="footer-link" href="https://soap.fyi">soap.fyi</a>. All rights reserved.</p>
+    </footer>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

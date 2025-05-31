@@ -1,0 +1,151 @@
+body, html {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+
+body {
+  /* ... */
+  display: flex;
+  flex-direction: column; /* Makes the body a flex container for sticky footer */
+  /* ... */
+}
+
+.footer {
+  margin-top: auto; /* Pushes footer to the bottom in a flex column */
+  padding: 10px 20px;
+  background-color: #f8f8f8;
+  text-align: center; /* This centers the <p> text inside the footer */
+  width: 100%;
+  box-sizing: border-box;
+  color: #666;
+}
+
+
+body {
+  font-family: "Inter", "Segoe UI", sans-serif;
+  background-color: #f8f8f8;
+  color: #2e2e2e;
+  display: flex;
+  flex-direction: column;
+  padding-top: 65px;
+}
+
+.dashboard-tabs {
+    display: flex;
+    justify-content: center; /* Or left, or space-around */
+    gap: 10px; /* Space between tab links */
+    margin-bottom: 20px;
+}
+.tab-link {
+    padding: 10px 20px;
+    text-decoration: none;
+    color: #2e2e2e;
+    background-color: #f0f0f0;
+    border-radius: 5px;
+    transition: background-color 0.2s ease;
+}
+.tab-link:hover {
+    background-color: #d7f0fa; /* From your button:hover style */
+}
+.tab-link.active {
+    background-color: #bce0f0; /* From your button style */
+    font-weight: bold;
+}
+
+.navbar {
+  background-color: #bce0f0; /* soft soap blue */
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 2000;
+  display: flex; /* This is key for alignment */
+  align-items: center; /* Vertically aligns items in the navbar */
+  justify-content: space-between; /* Puts space between Home, Title-group, Spacer */
+  padding: 10px;
+}
+
+.navbar a { /* For the "Home" link */
+  /* float: left; NO LONGER NEEDED with flexbox */
+  display: block;
+  color: #2e2e2e;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.navbar-title {
+  /* position: absolute; */ /* No longer needed with flexbox for simple centering */
+  /* left: 50%; */
+  /* transform: translateX(-50%); */
+  /* The above absolute positioning is good, but flexbox can also achieve it if spacer is sized */
+  /* For true centering with flexbox if the spacer is dynamic: */
+  flex-grow: 1; /* Allows the title container to take up space */
+  text-align: center; /* Centers the text within the title div */
+  color: #2e2e2e;
+  font-size: 20px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.spacer {
+  width: 80px; /* Adjust this width to match the "Home" link's typical width to balance the title */
+  /* Or make it flex-basis: auto; if you want more dynamic spacing */
+}
+
+.form-multiselect {
+  width: 100%; /* Make it take full available width */
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box; /* Ensures padding and border don't add to width */
+  font-size: 0.9rem; /* Slightly adjust font size if needed */
+  line-height: 1.4;  /* Improve spacing between lines within the select options */
+  margin-bottom: 0.5rem; /* Add some space below the select box */
+}
+
+/* You can also target options directly if needed */
+.form-multiselect option {
+  padding: 4px 8px; /* Add some padding to each option for better spacing */
+}
+
+/* Style for the label above the select box */
+.form-label {
+  display: block; /* Make label take full width */
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+/* Style for the hint text below */
+.form-text-hint {
+  font-size: 0.8rem;
+  color: #666;
+  display: block; /* Make it take its own line */
+  margin-top: 0.3rem;
+}
+
+/* General styling for form groups if you use this class consistently */
+.form-group {
+  margin-bottom: 1.5rem; /* Ensure good spacing between form groups */
+}
+
+.footer {
+  margin-top: auto;
+  padding: 10px 20px;
+  background-color: #f8f8f8;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  color: #666; /* This is the color for the non-link text in the footer */
+}
+
+.footer-link {
+  color: #70c1b3; /* <<< THIS IS THE CHANGE/ADDITION */
+}
