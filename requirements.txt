@@ -1,0 +1,9 @@
+Flask
+pandas
+SQLAlchemy
+psycopg2-binary  
+matplotlib
+seaborn
+scikit-learn
+gunicorn         
+python-dotenv   
