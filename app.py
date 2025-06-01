@@ -75,13 +75,19 @@ def fetch_politicians_list(_engine): # Fetches all politicians, sorted by name
         return df
     except Exception as e: return pd.DataFrame({'politician_id': [], 'name': []})
 
+# app.py
+
 def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_threshold=10, sort_by_total_votes=False):
     if not _engine: return pd.DataFrame()
-    approve_threshold = 0.1; disapprove_threshold = -0.1
+    approve_threshold = 0.1
+    disapprove_threshold = -0.1
     
-    order_by_clause = "ORDER BY approve_percent DESC, ptv.total_votes DESC, p.name ASC"
-    if sort_by_total_votes:
+    # --- MODIFIED ORDER BY LOGIC ---
+    if sort_by_total_votes: # This is for Tab 3 (Similarity)
         order_by_clause = "ORDER BY ptv.total_votes DESC, approve_percent DESC, p.name ASC"
+    else: # This is for Tab 1 (Approval)
+        order_by_clause = "ORDER BY approve_percent DESC, disapprove_percent ASC, ptv.total_votes DESC, p.name ASC"
+    # --- END OF MODIFIED ORDER BY LOGIC ---
 
     query = text(f"""
         WITH VoteSentimentCategories AS (
@@ -110,12 +116,24 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
     try:
         with _engine.connect() as connection:
             df = pd.read_sql(query, connection, params={'min_votes_threshold': min_total_votes_threshold})
+        # Ensure correct data types
         for col in ['approve_percent', 'disapprove_percent', 'neutral_percent', 'total_votes']:
-            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            if col in df.columns: 
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # Optional: If you ever need to re-sort in Pandas after fetching (though SQL is better for this)
+        # if not sort_by_total_votes:
+        #     df = df.sort_values(by=['approve_percent', 'disapprove_percent', 'total_votes', 'politician_name'], 
+        #                           ascending=[False, True, False, True])
+        # else:
+        #     df = df.sort_values(by=['total_votes', 'approve_percent', 'politician_name'],
+        #                           ascending=[False, False, True])
+                                  
         return df
     except Exception as e: 
+        app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}")
         return pd.DataFrame()
-
+    
 def fetch_weekly_approval_trends_for_selected_politicians(_engine, politician_ids_list):
     if not _engine or not politician_ids_list: return pd.DataFrame()
     safe_politician_ids = tuple(int(pid) for pid in politician_ids_list)
@@ -195,7 +213,7 @@ def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, yl
     img_buf = BytesIO(); fig.savefig(img_buf, format="png", bbox_inches='tight', dpi=100); img_buf.seek(0)
     plt.close(fig); return img_buf
 
-def plot_similarity_heatmap_to_image(similarity_matrix_df, title="Submitted Sentiment Similarity"): 
+def plot_similarity_heatmap_to_image(similarity_matrix_df, title="Sentiment Similarity Matrix"): 
     if similarity_matrix_df.empty or len(similarity_matrix_df) < 2: return None
     plot_df = similarity_matrix_df.copy() 
     display_n = len(plot_df) 
@@ -300,7 +318,7 @@ def dashboard():
             if not weekly_df_multiple.empty and 'weekly_approval_rating_percent' in weekly_df_multiple.columns and weekly_df_multiple['weekly_approval_rating_percent'].notna().any():
                 weekly_trend_img_buf = plot_multiline_chart_to_image(
                     weekly_df_multiple, x_col='week_start_date', y_col='weekly_approval_rating_percent',
-                    group_col='politician_name', title='', xlabel='Week Start Date', ylabel='Approval Rating (%)'
+                    group_col='politician_name', title='Weekly Approval Rating', xlabel='Week Start Date', ylabel='Approval Rating (%)'
                 )
                 weekly_trend_img_base64 = get_image_as_base64(weekly_trend_img_buf)
         
@@ -346,7 +364,7 @@ def dashboard():
                 if vectors.ndim == 2 and vectors.shape[0] > 1:
                     sim_matrix = cosine_similarity(vectors)
                     sim_df = pd.DataFrame(sim_matrix, index=names, columns=names)
-                    heatmap_buf = plot_similarity_heatmap_to_image(sim_df, title="Submitted Sentiment Similarity")
+                    heatmap_buf = plot_similarity_heatmap_to_image(sim_df, title="Sentiment Similarity Matrix")
                     heatmap_img_base64 = get_image_as_base64(heatmap_buf)
                     similarity_df_valence_html = sim_df.style.format("{:.3f}").to_html(classes='styled-table', border=0) # Use a custom class
         similarity_data_dict = {

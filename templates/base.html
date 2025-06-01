@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <title>Soap | Dashboard</title> 
+    <title>Soap | Dashboard</title>
     
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -26,17 +26,17 @@
     <!-- Navbar - matching your new index.html structure -->
     <nav class="navbar">
         <a href="{{ url_for('dashboard') }}">Home</a>
-        <div class="navbar-title">Soap Dashboard</div>
+        <div class="navbar-title">Soap Dashboard</div> 
         <div class="spacer"></div>
     </nav>
 
     <!-- Main content area -->
     <div class="main-content-wrapper" style="padding: 1rem; flex-grow: 1;">
-        <div class="contribute-link-container" style="margin-bottom: 1.5rem; padding-top: 5px;">
+        <div class="contribute-link-container" style="text-align: center; margin-bottom: 1.5rem; padding-top: 5px;"> 
             <p>Contribute to the project here: <a href="https://use.soap.fyi" target="_blank" style="color: #76B0DF; font-weight: bold;">use.soap.fyi</a></p>
         </div>
 
-        {% if not engine_available and active_tab is not none %}
+        {% if not engine_available and active_tab is defined and active_tab is not none %}
             <section style="background-color: #ffdddd; color: #d8000c; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
               🔴 CRITICAL: Database connection failed. Dashboard cannot operate.
             </section>
@@ -50,6 +50,38 @@
         <p>© Copyright 2024-2025 <a class="footer-link" href="https://soap.fyi">soap.fyi</a>. All rights reserved.</p>
     </footer>
 
-    {% block scripts %}{% endblock %}
+    {% block scripts %}
+    <script>
+        function updateSliderValue(sliderId, outputId) {
+            const slider = document.getElementById(sliderId);
+            const output = document.getElementById(outputId);
+            if (slider && output) {
+                output.innerHTML = slider.value;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize slider values on page load if the slider is present
+            // This code will run on every page, but only act if the elements exist.
+            
+            // For Approval Tab Slider (if it exists on the current page)
+            const approvalSlider = document.getElementById('min_votes_slider_approval');
+            const approvalOutput = document.getElementById('slider_value_approval');
+            if (approvalSlider && approvalOutput) {
+                approvalOutput.innerHTML = approvalSlider.value;
+                // No need for active_tab check here if the element IDs are unique
+                // and only appear on the approval tab's content.
+            }
+
+            // If you have other sliders on other tabs, add their initialization here:
+            // Example:
+            // const trendsSlider = document.getElementById('some_other_slider_id_for_trends');
+            // const trendsOutput = document.getElementById('some_other_output_id_for_trends');
+            // if (trendsSlider && trendsOutput) {
+            //     trendsOutput.innerHTML = trendsSlider.value;
+            // }
+        });
+    </script>
+    {% endblock %}
 </body>
 </html>

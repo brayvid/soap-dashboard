@@ -2,7 +2,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-    {# Tab Navigation - Styled differently now #}
+    
     <nav class="dashboard-tabs" style="margin-bottom: 20px; text-align: center;">
         <a href="{{ url_for('dashboard', tab='approval') }}" 
            class="tab-link {% if active_tab == 'approval' %}active{% endif %}">Approval</a>
@@ -15,16 +15,25 @@
 
     {# --- APPROVAL RATINGS TAB CONTENT --- #}
     {% if active_tab == 'approval' %} 
-        <section id="approval-ratings-content"> {# Use section tag as per new CSS #}
+        <section id="approval-ratings-content">
             <h2>All Approval Ratings</h2>
             <p>Shows 'Approve', 'Neutral', 'Disapprove' votes based on word sentiment. Politicians with fewer than selected minimum scorable votes excluded.</p>
-            
+                
             <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
                 <input type="hidden" name="tab" value="approval">
-                <div class="form-group" style="margin-bottom: 1rem;">
-                    <label for="min_votes_slider_approval" class="form-label">Minimum submissions: {{ approval_data.min_votes_current }}</label>
+                
+                <div class="slider-container form-group" style="margin-bottom: 1rem;">
+                    {# --- MODIFIED LABEL AND VALUE STRUCTURE --- #}
+                    <div>
+                        <label for="min_votes_slider_approval" class="form-label" style="margin-right: 5px; display: inline;">Minimum submissions:</label>
+                        <span id="slider_value_approval" class="slider-current-value" style="font-weight: bold;">{{ approval_data.min_votes_current }}</span>
+                    </div>
+                    {# --- END OF MODIFIED LABEL AND VALUE STRUCTURE --- #}
+                    
                     <input type="range" class="form-range-slider" id="min_votes_slider_approval" name="min_votes" 
-                           min="1" max="100" value="{{ approval_data.min_votes_current }}" step="1" onchange="this.form.submit()">
+                        min="1" max="100" value="{{ approval_data.min_votes_current }}" step="1" 
+                        oninput="updateSliderValue('min_votes_slider_approval', 'slider_value_approval')"
+                        onchange="this.form.submit()">
                 </div>
             </form>
 
@@ -39,10 +48,9 @@
             {% endif %}
 
             <details class="data-expander">
-                <summary>View Sentiment Distribution Data</summary>
+                <summary>View Approval Rating Data</summary>
                 {% if approval_data.df_sentiment_dist is not none and not approval_data.df_sentiment_dist.empty %}
                     <div class="table-scroll-wrapper">
-                        {# Remove Bootstrap classes, use a custom class if needed or rely on generic table styling from styles.css #}
                         {{ approval_data.df_sentiment_dist[['politician_name', 'approve_percent', 'neutral_percent', 'disapprove_percent', 'total_votes']].to_html(classes='styled-table data-table', index=False, formatters={'approve_percent': '{:.1f}%'.format, 'neutral_percent': '{:.1f}%'.format, 'disapprove_percent': '{:.1f}%'.format}) | safe }}
                     </div>
                 {% else %}
@@ -53,6 +61,7 @@
 
     {# --- WEEKLY TRENDS TAB CONTENT --- #}
     {% elif active_tab == 'trends' %}
+        {# ... (rest of your trends tab content, which looks fine) ... #}
         <section id="weekly-trends-content">
             <h2>Weekly Trends & Comparison</h2>
             
@@ -108,9 +117,8 @@
                 {% endif %}
             </details>
         </section>
-
-    {# --- VALENCE SIMILARITY TAB CONTENT --- #}
     {% elif active_tab == 'similarity' %}
+        {# ... (rest of your similarity tab content, which looks fine) ... #}
         <section id="valence-similarity-content">
             <h2>Sentiment Similarity Matrix</h2>
             <p>Heatmap shows similarity based on sentiment profiles. Score closer to 1 indicates more similar profiles.</p>
@@ -121,12 +129,11 @@
                     <label for="politician_multiselector_similarity" class="form-label">Select Politicians (Max {{ similarity_data.MAX_HEATMAP_POLITICIANS }} shown):</label>
                     <p><small><input type="checkbox" name="politician_select_mode_similarity" value="All" {% if 'All' in request.args.get('politician_select_mode_similarity', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available</small></p>
                     
-                    {# Increase the size attribute here #}
                     <select multiple class="form-multiselect" id="politician_multiselector_similarity" name="politician_ids_similarity" size="10">
                         {% if similarity_data.available_politicians %}
                             {% for pol in similarity_data.available_politicians %}
                                 <option value="{{ pol.politician_id }}" {% if pol.politician_id in similarity_data.selected_politician_ids %}selected{% endif %}>
-                                    {{ pol.politician_name }} (Votes: {{ pol.total_votes }})  {# CHANGED pol.name to pol.politician_name #}
+                                    {{ pol.politician_name }} (Votes: {{ pol.total_votes }})
                                 </option>
                             {% endfor %}
                         {% else %}
@@ -158,7 +165,7 @@
                 <summary>View Similarity Matrix Data</summary>
                 {% if similarity_data.similarity_df_html %}
                     <div class="table-scroll-wrapper">
-                        {{ similarity_data.similarity_df_html | safe }} {# Assumes to_html uses 'styled-table' class #}
+                        {{ similarity_data.similarity_df_html | safe }}
                     </div>
                 {% elif similarity_data.selected_politician_ids %}
                     <p class="text-muted">Not enough data or politicians to generate matrix.</p>
@@ -172,8 +179,30 @@
 
 {% block scripts %}
 <script>
-// Basic JS for form submissions if needed, but onchange for range sliders handles it.
-// You might add JS for other interactions later.
-console.log("Dashboard page loaded. Active tab: {{ active_tab }}");
+function updateSliderValue(sliderId, outputId) {
+    const slider = document.getElementById(sliderId);
+    const output = document.getElementById(outputId);
+    if (slider && output) {
+        output.innerHTML = slider.value;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // If the active tab is 'approval', ensure the span for the slider value
+    // is initialized from the slider's current value.
+    // This is a safeguard, as Jinja2 should have already set the initial text of the span.
+    if ("{{ active_tab }}" === "approval") {
+        const slider = document.getElementById('min_votes_slider_approval');
+        const output = document.getElementById('slider_value_approval');
+        if (slider && output) {
+            // Ensure the span reflects the slider's initial value,
+            // which was set by Jinja2 in the input's 'value' attribute.
+            output.innerHTML = slider.value; 
+        }
+    }
+    // Add similar blocks here if you add live value sliders to other tabs,
+    // e.g., for a hypothetical 'trends_slider_value'
+    // if ("{{ active_tab }}" === "trends") { ... }
+});
 </script>
 {% endblock %}

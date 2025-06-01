@@ -149,3 +149,32 @@ body {
 .footer-link {
   color: #70c1b3; /* <<< THIS IS THE CHANGE/ADDITION */
 }
+
+.form-range-slider {
+  width: 80%; /* Or a fixed width like 300px, 400px, etc. */
+  /* Default browser range slider styles can be a bit plain.
+     You might need to add more specific styles for the track and thumb
+     if you want a fully custom look, but width is the main request here. */
+  margin-top: 5px; /* Add some space above if needed */
+  margin-bottom: 5px; /* Add some space below if needed */
+  cursor: pointer;
+}
+
+/* Optional: If you want to style the label and the live value display */
+.slider-container {
+  margin-bottom: 1.5rem; /* Space below the whole slider group */
+}
+
+.slider-label-container {
+  display: flex;
+  justify-content: space-between; /* Puts label on left, value on right */
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.slider-current-value {
+  font-weight: bold;
+  color: #337ab7; /* Example color, adjust as needed */
+  min-width: 30px; /* Ensure space for the number */
+  text-align: right;
+}
