@@ -77,6 +77,8 @@ def fetch_politicians_list(_engine): # Fetches all politicians, sorted by name
 
 # app.py
 
+# app.py
+
 def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_threshold=10, sort_by_total_votes=False):
     if not _engine: return pd.DataFrame()
     approve_threshold = 0.1
@@ -84,11 +86,15 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
     
     # --- MODIFIED ORDER BY LOGIC ---
     if sort_by_total_votes: # This is for Tab 3 (Similarity)
-        order_by_clause = "ORDER BY ptv.total_votes DESC, approve_percent DESC, p.name ASC"
+        # For Tab 3, we calculate the ranking score but sort primarily by total_votes
+        order_by_clause = "ORDER BY ptv.total_votes DESC, calculated_ranking_score DESC, p.name ASC"
     else: # This is for Tab 1 (Approval)
-        order_by_clause = "ORDER BY approve_percent DESC, disapprove_percent ASC, ptv.total_votes DESC, p.name ASC"
+        # Sort by the calculated ranking score.
+        # Higher score (more approval, less disapproval) is better.
+        order_by_clause = "ORDER BY calculated_ranking_score DESC, ptv.total_votes DESC, p.name ASC"
     # --- END OF MODIFIED ORDER BY LOGIC ---
 
+    # Add calculated_ranking_score to the SELECT statement
     query = text(f"""
         WITH VoteSentimentCategories AS (
             SELECT v.politician_id,
@@ -101,37 +107,84 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
             FROM VoteSentimentCategories GROUP BY politician_id, sentiment_category
         ), PoliticianTotalScorableVotes AS (
             SELECT politician_id, COUNT(*) AS total_votes FROM VoteSentimentCategories GROUP BY politician_id
+        ), PoliticianPercentages AS (
+            SELECT p.politician_id, p.name, ptv.total_votes,
+                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Approve' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS approve_percent,
+                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Disapprove' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS disapprove_percent,
+                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Neutral' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS neutral_percent
+            FROM politicians AS p JOIN PoliticianTotalScorableVotes AS ptv ON p.politician_id = ptv.politician_id
+            LEFT JOIN PoliticianSentimentCounts AS psc ON p.politician_id = psc.politician_id
+            WHERE ptv.total_votes >= :min_votes_threshold 
+            GROUP BY p.politician_id, p.name, ptv.total_votes
         )
-        SELECT p.politician_id, p.name AS politician_name,
-            COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Approve' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS approve_percent,
-            COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Disapprove' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS disapprove_percent,
-            COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Neutral' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS neutral_percent,
-            ptv.total_votes
-        FROM politicians AS p JOIN PoliticianTotalScorableVotes AS ptv ON p.politician_id = ptv.politician_id
-        LEFT JOIN PoliticianSentimentCounts AS psc ON p.politician_id = psc.politician_id
-        WHERE ptv.total_votes >= :min_votes_threshold 
-        GROUP BY p.politician_id, p.name, ptv.total_votes
+        SELECT 
+            pp.politician_id, 
+            pp.name AS politician_name,
+            pp.approve_percent,
+            pp.disapprove_percent,
+            pp.neutral_percent,
+            pp.total_votes,
+            (pp.approve_percent - pp.disapprove_percent) AS calculated_ranking_score -- Define the custom score
+        FROM PoliticianPercentages pp
         {order_by_clause}; 
+    """) # Note: The alias ptv is not used in PoliticianPercentages, it should be pp.total_votes
+    
+    # Re-check the order_by_clause to use aliases from the final SELECT if necessary,
+    # or ensure ptv.total_votes is still valid in the context of the overall query.
+    # Let's adjust the order_by_clause for the new structure:
+    if sort_by_total_votes:
+        order_by_clause_final = "ORDER BY total_votes DESC, calculated_ranking_score DESC, politician_name ASC"
+    else:
+        order_by_clause_final = "ORDER BY calculated_ranking_score DESC, total_votes DESC, politician_name ASC"
+
+    # Reconstruct the query with the final select and correct order by
+    # This is getting complex, might be better to do the final sort in Pandas if the SQL gets too convoluted
+    # For now, let's assume the CTE structure works with the outer ORDER BY referring to calculated_ranking_score and pp.total_votes (as total_votes)
+
+    query_with_final_order_by = text(f"""
+        WITH VoteSentimentCategories AS (
+            SELECT v.politician_id,
+                CASE WHEN w.sentiment_score > {approve_threshold} THEN 'Approve'
+                     WHEN w.sentiment_score < {disapprove_threshold} THEN 'Disapprove'
+                     ELSE 'Neutral' END AS sentiment_category
+            FROM votes AS v JOIN words AS w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL 
+        ), PoliticianSentimentCounts AS (
+            SELECT politician_id, sentiment_category, COUNT(*) AS category_count
+            FROM VoteSentimentCategories GROUP BY politician_id, sentiment_category
+        ), PoliticianTotalScorableVotes AS (
+            SELECT politician_id, COUNT(*) AS total_votes FROM VoteSentimentCategories GROUP BY politician_id
+        ), PoliticianPercentages AS (
+            SELECT p.politician_id, p.name AS politician_name, ptv.total_votes, -- politician_name here
+                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Approve' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS approve_percent,
+                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Disapprove' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS disapprove_percent,
+                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Neutral' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS neutral_percent
+            FROM politicians AS p JOIN PoliticianTotalScorableVotes AS ptv ON p.politician_id = ptv.politician_id
+            LEFT JOIN PoliticianSentimentCounts AS psc ON p.politician_id = psc.politician_id
+            WHERE ptv.total_votes >= :min_votes_threshold 
+            GROUP BY p.politician_id, p.name, ptv.total_votes
+        )
+        SELECT 
+            politician_id, 
+            politician_name, -- Use the alias from PoliticianPercentages
+            approve_percent,
+            disapprove_percent,
+            neutral_percent,
+            total_votes,
+            (approve_percent - disapprove_percent) AS calculated_ranking_score
+        FROM PoliticianPercentages
+        {order_by_clause_final}; -- Use the refined order by clause
     """)
+
+
     try:
         with _engine.connect() as connection:
-            df = pd.read_sql(query, connection, params={'min_votes_threshold': min_total_votes_threshold})
-        # Ensure correct data types
-        for col in ['approve_percent', 'disapprove_percent', 'neutral_percent', 'total_votes']:
+            df = pd.read_sql(query_with_final_order_by, connection, params={'min_votes_threshold': min_total_votes_threshold})
+        for col in ['approve_percent', 'disapprove_percent', 'neutral_percent', 'total_votes', 'calculated_ranking_score']:
             if col in df.columns: 
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        
-        # Optional: If you ever need to re-sort in Pandas after fetching (though SQL is better for this)
-        # if not sort_by_total_votes:
-        #     df = df.sort_values(by=['approve_percent', 'disapprove_percent', 'total_votes', 'politician_name'], 
-        #                           ascending=[False, True, False, True])
-        # else:
-        #     df = df.sort_values(by=['total_votes', 'approve_percent', 'politician_name'],
-        #                           ascending=[False, False, True])
-                                  
         return df
     except Exception as e: 
-        app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}")
+        app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}\nQuery: {query_with_final_order_by}")
         return pd.DataFrame()
     
 def fetch_weekly_approval_trends_for_selected_politicians(_engine, politician_ids_list):
