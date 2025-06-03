@@ -185,3 +185,21 @@ body {
     justify-content: center; /* Center the link horizontally */
     align-items: center; /* Center the link vertically */
 }
+
+.navbar a {
+  float: left;
+  display: block;
+  color: #2e2e2e;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+  -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+  transition: background-color 0.2s ease; /* Add transition for smoother hover */
+}
+
+
+.navbar a:hover {
+  background-color: #d7f0fa;
+  color: #2e2e2e;
+}
