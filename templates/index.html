@@ -10,6 +10,8 @@
            class="tab-link {% if active_tab == 'trends' %}active{% endif %}">Trends</a>
         <a href="{{ url_for('dashboard', tab='similarity') }}" 
            class="tab-link {% if active_tab == 'similarity' %}active{% endif %}">Similarity</a>
+        <a href="{{ url_for('dashboard', tab='dataset') }}"
+           class="tab-link {% if active_tab == 'dataset' %}active{% endif %}">Dataset</a> {# New Tab Link #}
     </nav>
     <hr style="margin-bottom: 20px;">
 
@@ -23,12 +25,10 @@
                 <input type="hidden" name="tab" value="approval">
                 
                 <div class="slider-container form-group" style="margin-bottom: 1rem;">
-                    {# --- MODIFIED LABEL AND VALUE STRUCTURE --- #}
                     <div>
                         <label for="min_votes_slider_approval" class="form-label" style="margin-right: 5px; display: inline;">Minimum submissions:</label>
                         <span id="slider_value_approval" class="slider-current-value" style="font-weight: bold;">{{ approval_data.min_votes_current }}</span>
                     </div>
-                    {# --- END OF MODIFIED LABEL AND VALUE STRUCTURE --- #}
                     
                     <input type="range" class="form-range-slider" id="min_votes_slider_approval" name="min_votes" 
                         min="1" max="100" value="{{ approval_data.min_votes_current }}" step="1" 
@@ -61,7 +61,6 @@
 
     {# --- WEEKLY TRENDS TAB CONTENT --- #}
     {% elif active_tab == 'trends' %}
-        {# ... (rest of your trends tab content, which looks fine) ... #}
         <section id="weekly-trends-content">
             <h2>Weekly Trends & Comparison</h2>
             
@@ -117,8 +116,8 @@
                 {% endif %}
             </details>
         </section>
+    {# --- SIMILARITY TAB CONTENT --- #}
     {% elif active_tab == 'similarity' %}
-        {# ... (rest of your similarity tab content, which looks fine) ... #}
         <section id="valence-similarity-content">
             <h2>Sentiment Similarity Matrix</h2>
             <p>Heatmap shows similarity based on sentiment profiles. Score closer to 1 indicates more similar profiles.</p>
@@ -174,6 +173,35 @@
                 {% endif %}
             </details>
         </section>
+    {# --- DATASET METRICS TAB CONTENT --- #}
+    {% elif active_tab == 'dataset' %}
+        <section id="dataset-metrics-content">
+            <h2>Dataset Metrics</h2>
+            <p>Basic statistics about the underlying dataset.</p>
+            
+            {% if dataset_data and dataset_data.metrics %}
+                <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; margin-left: auto; margin-right: auto;">
+                    <ul style="list-style-type: none; padding-left: 0;">
+                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee;">
+                            <strong>Politicians:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_politicians }}</span>
+                        </li>
+                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee;">
+                            <strong>Unique Words:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_words_scorable }}</span>
+                        </li>
+                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee;">
+                            <strong>Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_votes }}</span>
+                        </li>
+                        <li style="font-size: 1.1em; padding: 8px;">
+                            <strong>Date Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.votes_date_range }}</span>
+                        </li>
+                    </ul>
+                </div>
+            {% elif not engine_available %}
+                <p class="text-muted">Database connection not available. Cannot retrieve dataset metrics.</p>
+            {% else %}
+                <p class="text-muted">Could not retrieve dataset metrics at this time.</p>
+            {% endif %}
+        </section>
     {% endif %}
 {% endblock %}
 
@@ -188,21 +216,13 @@ function updateSliderValue(sliderId, outputId) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // If the active tab is 'approval', ensure the span for the slider value
-    // is initialized from the slider's current value.
-    // This is a safeguard, as Jinja2 should have already set the initial text of the span.
     if ("{{ active_tab }}" === "approval") {
         const slider = document.getElementById('min_votes_slider_approval');
         const output = document.getElementById('slider_value_approval');
         if (slider && output) {
-            // Ensure the span reflects the slider's initial value,
-            // which was set by Jinja2 in the input's 'value' attribute.
             output.innerHTML = slider.value; 
         }
     }
-    // Add similar blocks here if you add live value sliders to other tabs,
-    // e.g., for a hypothetical 'trends_slider_value'
-    // if ("{{ active_tab }}" === "trends") { ... }
 });
 </script>
 {% endblock %}
