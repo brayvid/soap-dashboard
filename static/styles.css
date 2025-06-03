@@ -178,3 +178,10 @@ body {
   min-width: 30px; /* Ensure space for the number */
   text-align: right;
 }
+
+.navbar-right-menu {
+    width: 110px; /* Matches original spacer width */
+    display: flex;
+    justify-content: center; /* Center the link horizontally */
+    align-items: center; /* Center the link vertically */
+}
