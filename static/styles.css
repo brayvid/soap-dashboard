@@ -1,9 +1,11 @@
+/* static/styles.css */
+
 body, html {
   margin: 0;
   padding: 0;
   min-height: 100%;
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: hidden; /* Prevent horizontal scroll on the body */
 }
 
 
@@ -31,28 +33,32 @@ body {
   color: #2e2e2e;
   display: flex;
   flex-direction: column;
-  padding-top: 65px;
+  padding-top: 65px; /* Account for fixed navbar height */
 }
 
 .dashboard-tabs {
     display: flex;
-    justify-content: center; /* Or left, or space-around */
-    gap: 10px; /* Space between tab links */
+    justify-content: center; /* Center tabs on larger screens */
+    gap: 8px; /* Default gap between tab links */
     margin-bottom: 20px;
+    padding: 0 10px; /* Add some padding to the container on larger screens */
+    box-sizing: border-box;
 }
 .tab-link {
-    padding: 10px 20px;
+    padding: 10px 15px; /* Default padding */
     text-decoration: none;
     color: #2e2e2e;
     background-color: #f0f0f0;
     border-radius: 5px;
     transition: background-color 0.2s ease;
+    white-space: nowrap; /* Prevent text inside tab from wrapping */
+    text-align: center;
 }
 .tab-link:hover {
-    background-color: #d7f0fa; /* From your button:hover style */
+    background-color: #d7f0fa; 
 }
 .tab-link.active {
-    background-color: #bce0f0; /* From your button style */
+    background-color: #bce0f0; 
     font-weight: bold;
 }
 
@@ -63,14 +69,14 @@ body {
   top: 0;
   width: 100%;
   z-index: 2000;
-  display: flex; /* This is key for alignment */
-  align-items: center; /* Vertically aligns items in the navbar */
-  justify-content: space-between; /* Puts space between Home, Title-group, Spacer */
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
   padding: 10px;
+  box-sizing: border-box;
 }
 
-.navbar a { /* For the "Home" link */
-  /* float: left; NO LONGER NEEDED with flexbox */
+.navbar a { 
   display: block;
   color: #2e2e2e;
   text-align: center;
@@ -82,58 +88,56 @@ body {
 }
 
 .navbar-title {
-  /* position: absolute; */ /* No longer needed with flexbox for simple centering */
-  /* left: 50%; */
-  /* transform: translateX(-50%); */
-  /* The above absolute positioning is good, but flexbox can also achieve it if spacer is sized */
-  /* For true centering with flexbox if the spacer is dynamic: */
-  flex-grow: 1; /* Allows the title container to take up space */
-  text-align: center; /* Centers the text within the title div */
+  flex-grow: 1; 
+  text-align: center; 
   color: #2e2e2e;
   font-size: 20px;
   font-weight: bold;
   white-space: nowrap;
 }
 
-.spacer {
-  width: 80px; /* Adjust this width to match the "Home" link's typical width to balance the title */
-  /* Or make it flex-basis: auto; if you want more dynamic spacing */
+.navbar-right-menu { /* Changed from .spacer to be more descriptive */
+    width: auto; /* Let it size by content */
+    min-width: 80px; /* Ensure some minimum space for balance, adjust as needed */
+    display: flex;
+    justify-content: flex-end; /* Align items to the right */
+    align-items: center;
+}
+.navbar-right-menu a { /* Styling for the "Dash" link if it's distinct */
+    padding: 14px 16px; /* Match other navbar links if desired */
 }
 
+
 .form-multiselect {
-  width: 100%; /* Make it take full available width */
+  width: 100%; 
   padding: 0.5rem;
   border: 1px solid #ccc;
   border-radius: 4px;
-  box-sizing: border-box; /* Ensures padding and border don't add to width */
-  font-size: 0.9rem; /* Slightly adjust font size if needed */
-  line-height: 1.4;  /* Improve spacing between lines within the select options */
-  margin-bottom: 0.5rem; /* Add some space below the select box */
+  box-sizing: border-box; 
+  font-size: 0.9rem; 
+  line-height: 1.4;  
+  margin-bottom: 0.5rem; 
 }
 
-/* You can also target options directly if needed */
 .form-multiselect option {
-  padding: 4px 8px; /* Add some padding to each option for better spacing */
+  padding: 4px 8px; 
 }
 
-/* Style for the label above the select box */
 .form-label {
-  display: block; /* Make label take full width */
+  display: block; 
   margin-bottom: 0.5rem;
   font-weight: bold;
 }
 
-/* Style for the hint text below */
 .form-text-hint {
   font-size: 0.8rem;
   color: #666;
-  display: block; /* Make it take its own line */
+  display: block; 
   margin-top: 0.3rem;
 }
 
-/* General styling for form groups if you use this class consistently */
 .form-group {
-  margin-bottom: 1.5rem; /* Ensure good spacing between form groups */
+  margin-bottom: 1.5rem; 
 }
 
 .footer {
@@ -143,63 +147,111 @@ body {
   text-align: center;
   width: 100%;
   box-sizing: border-box;
-  color: #666; /* This is the color for the non-link text in the footer */
+  color: #666; 
 }
 
 .footer-link {
-  color: #70c1b3; /* <<< THIS IS THE CHANGE/ADDITION */
+  color: #70c1b3; 
 }
 
 .form-range-slider {
-  width: 80%; /* Or a fixed width like 300px, 400px, etc. */
-  /* Default browser range slider styles can be a bit plain.
-     You might need to add more specific styles for the track and thumb
-     if you want a fully custom look, but width is the main request here. */
-  margin-top: 5px; /* Add some space above if needed */
-  margin-bottom: 5px; /* Add some space below if needed */
+  width: 80%; 
+  margin-top: 5px; 
+  margin-bottom: 5px; 
   cursor: pointer;
 }
 
-/* Optional: If you want to style the label and the live value display */
 .slider-container {
-  margin-bottom: 1.5rem; /* Space below the whole slider group */
+  margin-bottom: 1.5rem; 
 }
 
 .slider-label-container {
   display: flex;
-  justify-content: space-between; /* Puts label on left, value on right */
+  justify-content: space-between; 
   align-items: center;
   margin-bottom: 0.5rem;
 }
 
 .slider-current-value {
   font-weight: bold;
-  color: #337ab7; /* Example color, adjust as needed */
-  min-width: 30px; /* Ensure space for the number */
+  color: #337ab7; 
+  min-width: 30px; 
   text-align: right;
 }
-
-.navbar-right-menu {
-    width: 110px; /* Matches original spacer width */
-    display: flex;
-    justify-content: center; /* Center the link horizontally */
-    align-items: center; /* Center the link vertically */
-}
-
-.navbar a {
-  float: left;
-  display: block;
-  color: #2e2e2e;
-  text-align: center;
-  padding: 14px 16px;
-  text-decoration: none;
-  font-size: 17px;
-  -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
-  transition: background-color 0.2s ease; /* Add transition for smoother hover */
-}
-
 
 .navbar a:hover {
   background-color: #d7f0fa;
   color: #2e2e2e;
+}
+
+/* Table Styles (example, you might have these already or want to refine) */
+.table-scroll-wrapper {
+    max-height: 400px; /* Or your preferred height */
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    margin-top: 0.5rem;
+}
+.styled-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.styled-table th, .styled-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+.styled-table th {
+    background-color: #f2f2f2;
+    position: sticky; /* Make headers sticky within the scroll wrapper */
+    top: 0;
+    z-index: 1;
+}
+.styled-table tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+.styled-table tbody tr:hover {
+    background-color: #f1f1f1;
+}
+
+/* Responsive adjustments for tabs on smaller screens */
+@media (max-width: 680px) { /* Adjusted breakpoint for mobile/small tablets */
+    .dashboard-tabs {
+        width: 100%; /* Make the container take full width */
+        justify-content: space-between; /* Distribute space between items */
+        padding: 0 4px; /* Minimal padding on the sides of the container */
+        gap: 4px; /* Reduce gap between tabs */
+    }
+
+    .tab-link {
+        flex-grow: 1; /* Allow tabs to grow and share space equally */
+        flex-basis: 0; /* Start with no intrinsic width, helping equal distribution */
+        padding: 10px 5px; /* Reduce horizontal padding significantly, keep vertical */
+        font-size: 13px; /* Slightly reduce font size for compactness */
+        /* For very narrow screens, you might need font-size: 12px or even 0.75em */
+    }
+
+    .navbar-title {
+      font-size: 18px; /* Slightly smaller title on mobile */
+    }
+    .navbar a {
+      padding: 12px 10px; /* Adjust padding for Home/Dash links */
+      font-size: 16px;
+    }
+}
+
+@media (max-width: 420px) { /* For very small screens */
+    .tab-link {
+        padding: 8px 3px; /* Further reduce padding */
+        font-size: 12px; /* Further reduce font size */
+    }
+    .dashboard-tabs {
+        gap: 2px;
+    }
+    .navbar-title {
+      font-size: 16px;
+    }
+    .navbar a {
+      padding: 10px 8px;
+      font-size: 15px;
+    }
 }
