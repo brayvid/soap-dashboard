@@ -8,12 +8,21 @@ body, html {
   overflow-x: hidden; /* Prevent horizontal scroll on the body */
 }
 
-
 body {
-  /* ... */
   display: flex;
   flex-direction: column; /* Makes the body a flex container for sticky footer */
-  /* ... */
+  font-family: "Inter", "Segoe UI", sans-serif;
+  background-color: #f8f8f8;
+  color: #2e2e2e;
+  padding-top: 65px; /* Account for fixed navbar height */
+  box-sizing: border-box; /* Ensures padding doesn't add to overall dimensions */
+}
+
+.main-content-wrapper {
+  padding: 1rem;
+  flex-grow: 1; /* Allows main content to fill available space */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .footer {
@@ -26,16 +35,11 @@ body {
   color: #666;
 }
 
-
-body {
-  font-family: "Inter", "Segoe UI", sans-serif;
-  background-color: #f8f8f8;
-  color: #2e2e2e;
-  display: flex;
-  flex-direction: column;
-  padding-top: 65px; /* Account for fixed navbar height */
+.footer-link {
+  color: #70c1b3; 
 }
 
+/* --- Navigation Tabs --- */
 .dashboard-tabs {
     display: flex;
     justify-content: center; /* Center tabs on larger screens */
@@ -43,6 +47,7 @@ body {
     margin-bottom: 20px;
     padding: 0 10px; /* Add some padding to the container on larger screens */
     box-sizing: border-box;
+    flex-wrap: nowrap; /* Ensure tabs try to stay on one line */
 }
 .tab-link {
     padding: 10px 15px; /* Default padding */
@@ -53,6 +58,7 @@ body {
     transition: background-color 0.2s ease;
     white-space: nowrap; /* Prevent text inside tab from wrapping */
     text-align: center;
+    flex-shrink: 0; /* Prevent tabs from shrinking too much by default */
 }
 .tab-link:hover {
     background-color: #d7f0fa; 
@@ -62,17 +68,19 @@ body {
     font-weight: bold;
 }
 
+/* --- Navbar --- */
 .navbar {
   background-color: #bce0f0; /* soft soap blue */
-  overflow: hidden;
+  overflow: hidden; /* Clears floats if any were used, though flex is preferred */
   position: fixed;
   top: 0;
+  left: 0; /* Ensure it aligns to the left */
   width: 100%;
   z-index: 2000;
   display: flex; 
   align-items: center; 
   justify-content: space-between; 
-  padding: 10px;
+  padding: 10px 15px; /* Adjusted padding slightly for balance */
   box-sizing: border-box;
 }
 
@@ -85,6 +93,11 @@ body {
   font-size: 17px;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.2s ease;
+  white-space: nowrap;
+}
+.navbar a:hover {
+  background-color: #d7f0fa;
+  color: #2e2e2e;
 }
 
 .navbar-title {
@@ -94,20 +107,25 @@ body {
   font-size: 20px;
   font-weight: bold;
   white-space: nowrap;
+  margin: 0 10px; /* Add some margin to prevent touching other elements */
 }
 
-.navbar-right-menu { /* Changed from .spacer to be more descriptive */
-    width: auto; /* Let it size by content */
-    min-width: 80px; /* Ensure some minimum space for balance, adjust as needed */
+.navbar-right-menu { 
     display: flex;
-    justify-content: flex-end; /* Align items to the right */
     align-items: center;
-}
-.navbar-right-menu a { /* Styling for the "Dash" link if it's distinct */
-    padding: 14px 16px; /* Match other navbar links if desired */
+    justify-content: flex-end; /* Aligns items like "Dash" to the far right */
+    min-width: 80px; /* Give it some space so title doesn't always push it */
 }
 
-
+/* --- Forms & Inputs --- */
+.form-group {
+  margin-bottom: 1.5rem; 
+}
+.form-label {
+  display: block; 
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
 .form-multiselect {
   width: 100%; 
   padding: 0.5rem;
@@ -118,93 +136,77 @@ body {
   line-height: 1.4;  
   margin-bottom: 0.5rem; 
 }
-
 .form-multiselect option {
   padding: 4px 8px; 
 }
-
-.form-label {
-  display: block; 
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-}
-
 .form-text-hint {
   font-size: 0.8rem;
   color: #666;
   display: block; 
   margin-top: 0.3rem;
 }
-
-.form-group {
-  margin-bottom: 1.5rem; 
-}
-
-.footer {
-  margin-top: auto;
-  padding: 10px 20px;
-  background-color: #f8f8f8;
-  text-align: center;
-  width: 100%;
-  box-sizing: border-box;
-  color: #666; 
-}
-
-.footer-link {
-  color: #70c1b3; 
-}
-
 .form-range-slider {
   width: 80%; 
   margin-top: 5px; 
   margin-bottom: 5px; 
   cursor: pointer;
 }
-
 .slider-container {
   margin-bottom: 1.5rem; 
 }
-
 .slider-label-container {
   display: flex;
   justify-content: space-between; 
   align-items: center;
   margin-bottom: 0.5rem;
 }
-
 .slider-current-value {
   font-weight: bold;
   color: #337ab7; 
   min-width: 30px; 
   text-align: right;
 }
-
-.navbar a:hover {
-  background-color: #d7f0fa;
-  color: #2e2e2e;
+button.button-primary {
+    background-color: #76B0DF; /* Example primary button color */
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.2s ease;
+}
+button.button-primary:hover {
+    background-color: #5c9acb; /* Darker shade on hover */
 }
 
-/* Table Styles (example, you might have these already or want to refine) */
+/* --- Table Styles --- */
 .table-scroll-wrapper {
-    max-height: 400px; /* Or your preferred height */
-    overflow-y: auto;
+    max-height: 400px; 
+    overflow-y: auto;   /* Vertical scroll for table content */
+    overflow-x: auto;   /* Horizontal scroll if table content is too wide */
     border: 1px solid #ddd;
     margin-top: 0.5rem;
+    width: 100%; /* Make wrapper take full available width */
+    box-sizing: border-box;
 }
 .styled-table {
     width: 100%;
     border-collapse: collapse;
+    font-size: 0.9em; /* Default table font size */
 }
 .styled-table th, .styled-table td {
     border: 1px solid #ddd;
-    padding: 8px;
+    padding: 8px; /* Default padding */
     text-align: left;
+    /* white-space: nowrap; /* Apply selectively if needed */
 }
 .styled-table th {
     background-color: #f2f2f2;
-    position: sticky; /* Make headers sticky within the scroll wrapper */
+    position: sticky; 
     top: 0;
-    z-index: 1;
+    z-index: 1; /* Ensure header stays above scrolling content */
+    font-weight: bold;
 }
 .styled-table tbody tr:nth-child(even) {
     background-color: #f9f9f9;
@@ -213,45 +215,175 @@ body {
     background-color: #f1f1f1;
 }
 
-/* Responsive adjustments for tabs on smaller screens */
-@media (max-width: 680px) { /* Adjusted breakpoint for mobile/small tablets */
-    .dashboard-tabs {
-        width: 100%; /* Make the container take full width */
-        justify-content: space-between; /* Distribute space between items */
-        padding: 0 4px; /* Minimal padding on the sides of the container */
-        gap: 4px; /* Reduce gap between tabs */
-    }
+/* Styles for the Feed Tab Table */
+.feed-table-wrapper { 
+    max-width: 700px; /* Or another value, or 100% if you want it to fill container */
+    margin-left: auto;  
+    margin-right: auto; 
+    /* overflow-x: auto; already handled by .table-scroll-wrapper if nested */
+}
+.feed-table { /* Specific class for the feed table if needed */
+    /* Inherits from .styled-table */
+}
+.feed-table th, .feed-table td { 
+    padding: 6px 8px; /* Slightly smaller padding for feed table */
+    white-space: nowrap; /* Try to keep feed items on one line */
+}
+.feed-table td:last-child { /* Timestamp column in feed table */
+    /* white-space: nowrap; /* Already applied above */
+}
 
-    .tab-link {
-        flex-grow: 1; /* Allow tabs to grow and share space equally */
-        flex-basis: 0; /* Start with no intrinsic width, helping equal distribution */
-        padding: 10px 5px; /* Reduce horizontal padding significantly, keep vertical */
-        font-size: 13px; /* Slightly reduce font size for compactness */
-        /* For very narrow screens, you might need font-size: 12px or even 0.75em */
-    }
 
-    .navbar-title {
-      font-size: 18px; /* Slightly smaller title on mobile */
+/* --- General Utility & Message Styles --- */
+.plot-container {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+.plot-container img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #eee; /* Optional: add a light border to plots */
+  border-radius: 4px;
+}
+.info-message, .warning-message {
+  padding: 10px 15px;
+  border-radius: 5px;
+  margin: 1rem 0;
+  text-align: center;
+}
+.info-message {
+  background-color: #eef;
+  color: #336; /* Example color for info messages */
+  border: 1px solid #cce;
+}
+.warning-message {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+}
+.data-expander summary {
+  cursor: pointer;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  color: #337ab7;
+}
+.data-expander summary:hover {
+  text-decoration: underline;
+}
+.text-muted {
+  color: #6c757d; /* Bootstrap's muted text color */
+  font-style: italic;
+}
+.contribute-link-container {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  padding-top: 5px;
+}
+.contribute-link-container a {
+  color: #76B0DF;
+  font-weight: bold;
+}
+.metrics-container ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+.metrics-container li {
+  margin-bottom: 12px;
+  font-size: 1.1em;
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  overflow: hidden; /* Contain floats */
+}
+.metrics-container li strong {
+  /* Standard strong styling is usually fine */
+}
+.metrics-container li span {
+  float: right;
+  font-weight: bold;
+  color: #337ab7;
+}
+
+/* --- Responsive Adjustments --- */
+@media (max-width: 768px) { /* General tablet and smaller */
+    .form-range-slider {
+        width: 95%; /* Make slider more responsive */
     }
-    .navbar a {
-      padding: 12px 10px; /* Adjust padding for Home/Dash links */
-      font-size: 16px;
+    .styled-table {
+        font-size: 0.85em; /* Reduce table font slightly earlier */
+    }
+    .styled-table th, .styled-table td {
+        padding: 6px;
     }
 }
 
-@media (max-width: 420px) { /* For very small screens */
-    .tab-link {
-        padding: 8px 3px; /* Further reduce padding */
-        font-size: 12px; /* Further reduce font size */
-    }
+@media (max-width: 680px) { /* Mobile/small tablets: Tab and Navbar adjustments */
     .dashboard-tabs {
-        gap: 2px;
+        width: 100%; 
+        justify-content: space-around; /* More even distribution */
+        padding: 0 2px; 
+        gap: 2px; 
+    }
+    .tab-link {
+        flex-grow: 1; 
+        flex-basis: 0; 
+        padding: 10px 3px; /* Reduced padding */
+        font-size: 12px;  /* Smaller font for tabs */
+        overflow: hidden; /* Hide overflow if text is still too long */
+        text-overflow: ellipsis; /* Add ellipsis for very long tab names */
+    }
+    .navbar {
+        padding: 8px 10px; /* Reduce navbar padding */
     }
     .navbar-title {
-      font-size: 16px;
+      font-size: 17px; 
+    }
+    .navbar a { /* Home/Dash links */
+      padding: 10px 8px; 
+      font-size: 15px;
+    }
+    /* Further reduce font size for ALL tables on mobile */
+    .styled-table th, .styled-table td {
+        font-size: 13px; /* Or 0.8em */
+        padding: 5px; 
+    }
+    
+    /* Specific adjustments for the Feed table text on mobile */
+    .feed-table th, .feed-table td {
+        font-size: 12px; 
+        padding: 4px 5px;   
+        /* white-space: nowrap; /* Already set, but you can override to normal if needed */
+    }
+     /* Example of allowing specific columns to wrap on mobile if nowrap causes issues */
+    .feed-table td:nth-child(1), /* Word column */
+    .feed-table td:nth-child(2) { /* Politician column */
+        /* white-space: normal; /* Uncomment to allow wrapping for these */
+        /* word-break: break-all; /* Force break very long words if necessary */
+    }
+}
+
+@media (max-width: 480px) { /* Very small screens */
+    .tab-link {
+        padding: 8px 2px; 
+        font-size: 11px; 
+    }
+    .dashboard-tabs {
+        gap: 1px;
+    }
+    .navbar-title {
+      font-size: 15px;
     }
     .navbar a {
-      padding: 10px 8px;
-      font-size: 15px;
+      padding: 8px 6px;
+      font-size: 14px;
+    }
+    /* Further reduce font size for ALL tables on very small screens */
+    .styled-table th, .styled-table td {
+        font-size: 12px; 
+        padding: 4px;
+    }
+    /* Specific adjustments for the Feed table text on very small screens */
+    .feed-table th, .feed-table td {
+        font-size: 10px; 
+        padding: 3px 4px;
     }
 }

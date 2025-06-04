@@ -21,23 +21,19 @@ app = Flask(__name__)
 
 # --- Database Connection ---
 DEPLOY_ENV = os.environ.get('DEPLOY_ENV', 'DEVELOPMENT').upper()
-# Add some logging to see if FLASK_ENV is picked up
-app.logger.info(f"FLASK_ENV from os.environ: {os.environ.get('FLASK_ENV')}")
-app.logger.info(f"DEPLOY_ENV set to: {DEPLOY_ENV}")
+# app.logger.info(f"FLASK_ENV from os.environ: {os.environ.get('FLASK_ENV')}") 
+# app.logger.info(f"DEPLOY_ENV set to: {DEPLOY_ENV}")
 
 
 def get_env_var(var_name_prefix, key):
-    # Using simplified logic for local dev: expects DB_USERNAME, DB_PASSWORD etc.
-    # For PRODUCTION, it expects DB_USERNAME_PROD, DB_PASSWORD_PROD etc.
     var_to_check = f"{var_name_prefix}_{key.upper()}"
     if DEPLOY_ENV == 'PRODUCTION':
         var_to_check_prod = f"{var_name_prefix}_{key.upper()}_PROD"
         val = os.environ.get(var_to_check_prod)
-        app.logger.info(f"[get_env_var PROD] Tried {var_to_check_prod}, got: {val}")
         return val
     else: # DEVELOPMENT or other
         val = os.environ.get(var_to_check)
-        app.logger.info(f"[get_env_var DEV] Tried {var_to_check}, got: {val}")
+        app.logger.info(f"[get_env_var DEV] Tried {var_to_check}, got: {val if val else 'None'}")
         return val
 
 def get_engine():
@@ -66,14 +62,16 @@ def get_engine():
 
 engine = get_engine()
 
-# --- Your data fetching and plotting functions (fetch_politicians_list, etc.) ---
-def fetch_politicians_list(_engine): # Fetches all politicians, sorted by name
+# --- Data Fetching Functions ---
+def fetch_politicians_list(_engine):
     if not _engine: return pd.DataFrame({'politician_id': [], 'name': []})
-    query = text("SELECT politician_id, name FROM politicians ORDER BY name ASC;") # Explicitly sort by name ASC
+    query = text("SELECT politician_id, name FROM politicians ORDER BY name ASC;")
     try:
         with _engine.connect() as connection: df = pd.read_sql(query, connection)
         return df
-    except Exception as e: return pd.DataFrame({'politician_id': [], 'name': []})
+    except Exception as e: 
+        app.logger.error(f"Error in fetch_politicians_list: {e}")
+        return pd.DataFrame({'politician_id': [], 'name': []})
 
 def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_threshold=10, sort_by_total_votes=False):
     if not _engine: return pd.DataFrame()
@@ -127,15 +125,24 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
     except Exception as e: 
-        app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}\nQuery: {query_with_final_order_by}")
+        app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}\nQuery was: {query_with_final_order_by}")
         return pd.DataFrame()
     
 def fetch_weekly_approval_trends_for_selected_politicians(_engine, politician_ids_list):
     if not _engine or not politician_ids_list: return pd.DataFrame()
-    safe_politician_ids = tuple(int(pid) for pid in politician_ids_list)
+    try:
+        safe_politician_ids = tuple(map(int, politician_ids_list))
+    except ValueError:
+        app.logger.error(f"Invalid non-integer ID in politician_ids_list for trends: {politician_ids_list}")
+        return pd.DataFrame()
+
     if not safe_politician_ids: return pd.DataFrame()
-    if len(safe_politician_ids) == 1: in_clause_sql = f"({safe_politician_ids[0]})"
-    else: in_clause_sql = str(safe_politician_ids)
+    
+    if len(safe_politician_ids) == 1:
+        in_clause_sql = f"({safe_politician_ids[0]})"
+    else:
+        in_clause_sql = str(safe_politician_ids)
+
     query = text(f"""
         SELECT p.name AS politician_name, p.politician_id,           
             TO_CHAR(v.created_at, 'IYYY-IW') AS year_week,
@@ -156,55 +163,64 @@ def fetch_weekly_approval_trends_for_selected_politicians(_engine, politician_id
         if 'weekly_approval_rating_percent' in df.columns: df['weekly_approval_rating_percent'] = pd.to_numeric(df['weekly_approval_rating_percent'], errors='coerce') 
         if 'week_start_date' in df.columns: df['week_start_date'] = pd.to_datetime(df['week_start_date'], errors='coerce')
         return df
-    except Exception as e: return pd.DataFrame()
+    except Exception as e: 
+        app.logger.error(f"Error in fetch_weekly_approval_trends_for_selected_politicians: {e}")
+        return pd.DataFrame()
 
 def fetch_dataset_metrics(_engine):
     if not _engine:
-        return {
-            "total_politicians": "N/A",
-            "total_words_scorable": "N/A",
-            "total_votes": "N/A",
-            "votes_date_range": "N/A"
-        }
+        return {key: "N/A" for key in ["total_politicians", "total_words_scorable", "total_votes", "votes_date_range"]}
     metrics = {}
     try:
         with _engine.connect() as connection:
-            # Total politicians
-            result = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none()
-            metrics["total_politicians"] = result if result is not None else "N/A"
-
-            # Total words with sentiment scores
-            result = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none()
-            metrics["total_words_scorable"] = result if result is not None else "N/A"
+            metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or "N/A"
+            metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or "N/A"
+            metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or "N/A"
             
-            # Total votes
-            result = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none()
-            metrics["total_votes"] = result if result is not None else "N/A"
-
-            # Date range of votes
-            result_date_range = connection.execute(text("SELECT MIN(created_at)::date AS min_date, MAX(created_at)::date AS max_date FROM votes;")).fetchone()
-            if result_date_range and result_date_range.min_date and result_date_range.max_date:
-                min_d = result_date_range.min_date
-                max_d = result_date_range.max_date
-                if isinstance(min_d, datetime.date) and isinstance(max_d, datetime.date): # Ensure they are date objects
-                    if min_d == max_d:
-                        metrics["votes_date_range"] = f"On {min_d.strftime('%Y-%m-%d')}"
-                    else:
-                        metrics["votes_date_range"] = f"{min_d.strftime('%Y-%m-%d')} to {max_d.strftime('%Y-%m-%d')}"
-                else: # Should not happen if query is correct and data exists
-                    metrics["votes_date_range"] = "Invalid date format"
+            res_dates = connection.execute(text("SELECT MIN(created_at)::date AS min_date, MAX(created_at)::date AS max_date FROM votes;")).fetchone()
+            if res_dates and res_dates.min_date and res_dates.max_date:
+                min_d, max_d = res_dates.min_date, res_dates.max_date
+                metrics["votes_date_range"] = f"{min_d.strftime('%Y-%m-%d')} to {max_d.strftime('%Y-%m-%d')}" if min_d != max_d else f"On {min_d.strftime('%Y-%m-%d')}"
             else:
                 metrics["votes_date_range"] = "N/A"
         return metrics
     except Exception as e:
         app.logger.error(f"Error fetching dataset metrics: {e}")
-        return {
-            "total_politicians": "Error",
-            "total_words_scorable": "Error",
-            "total_votes": "Error",
-            "votes_date_range": "Error"
-        }
+        return {key: "Error" for key in ["total_politicians", "total_words_scorable", "total_votes", "votes_date_range"]}
 
+def fetch_feed_updates(_engine, limit=50): # Renamed function
+    if not _engine: return pd.DataFrame()
+    query = text(f"""
+        SELECT
+            w.word AS "Word",
+            p.name AS "Politician",
+            v.created_at AS "Timestamp"
+        FROM
+            votes v
+        JOIN
+            words w ON v.word_id = w.word_id
+        JOIN
+            politicians p ON v.politician_id = p.politician_id
+        ORDER BY
+            v.created_at DESC
+        LIMIT :limit_val;
+    """)
+    try:
+        with _engine.connect() as connection:
+            df = pd.read_sql(query, connection, params={'limit_val': limit})
+        
+        if not df.empty:
+            if 'Timestamp' in df.columns:
+                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+            
+            if 'Word' in df.columns:
+                df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+        return df
+    except Exception as e:
+        app.logger.error(f"Error fetching feed updates: {e}\nQuery: {query}")
+        return pd.DataFrame()
+
+# --- Plotting Functions ---
 def plot_stacked_horizontal_bar_to_image(df, categories, category_colors, title, xlabel, ylabel, top_n=20, decimal_places=1):
     if df.empty or not all(cat in df.columns for cat in categories): return None
     data_to_plot = df.head(top_n).copy();
@@ -283,22 +299,21 @@ def get_image_as_base64(img_buf):
         img_buf.seek(0)
         return base64.b64encode(img_buf.read()).decode('utf-8')
     return None
-# ---- END of data/plotting functions ----
 
 # --- Main Dashboard Route ---
 @app.route('/')
 def dashboard():
     if not engine:
-        # Ensure you have templates/error.html
         return render_template('error.html', message="CRITICAL: Database connection failed. Dashboard cannot operate.")
 
     active_tab = request.args.get('tab', 'approval')
-    politicians_list_df = fetch_politicians_list(engine) # Fetched once for all tabs if needed
+    politicians_list_df = fetch_politicians_list(engine)
     
     approval_data_dict = {}
     trends_data_dict = {}
     similarity_data_dict = {}
-    dataset_data_dict = {} # New dictionary for dataset tab
+    dataset_data_dict = {}
+    feed_data_dict = {} # Renamed from updates_data_dict
 
     if active_tab == 'approval':
         min_votes_param = request.args.get('min_votes', '10')
@@ -327,15 +342,12 @@ def dashboard():
         selected_politician_ids_str = request.args.getlist('politician_ids_trends')
         selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
 
-        if not selected_politician_ids and not politicians_list_df.empty:
+        if not selected_politician_ids_str and not politicians_list_df.empty:
             trump_row = politicians_list_df[politicians_list_df['name'].str.contains("Donald Trump", case=False, na=False)]
             if not trump_row.empty:
-                trump_id = trump_row['politician_id'].iloc[0]
-                selected_politician_ids = [trump_id]
-                app.logger.info(f"Defaulting Tab 2 to Donald Trump (ID: {trump_id})")
+                selected_politician_ids = [int(trump_row['politician_id'].iloc[0])]
             elif not politicians_list_df.empty:
-                selected_politician_ids = [politicians_list_df['politician_id'].iloc[0]]
-                app.logger.info(f"Donald Trump not found, defaulting Tab 2 to first politician.")
+                selected_politician_ids = [int(politicians_list_df['politician_id'].iloc[0])]
         
         if "All" in request.args.get('politician_select_mode_trends', '') and not politicians_list_df.empty:
             selected_politician_ids_for_query = politicians_list_df['politician_id'].tolist()
@@ -348,7 +360,6 @@ def dashboard():
 
         if selected_politician_ids_for_query and not politicians_list_df.empty:
             selected_politician_names = politicians_list_df[politicians_list_df['politician_id'].isin(selected_politician_ids_for_query)]['name'].tolist()
-            
             weekly_df_multiple = fetch_weekly_approval_trends_for_selected_politicians(engine, selected_politician_ids_for_query)
             if not weekly_df_multiple.empty and 'weekly_approval_rating_percent' in weekly_df_multiple.columns and weekly_df_multiple['weekly_approval_rating_percent'].notna().any():
                 weekly_trend_img_buf = plot_multiline_chart_to_image(
@@ -365,8 +376,8 @@ def dashboard():
         
         trends_data_dict = {
             'all_politicians': politicians_list_df,
-            'selected_politician_ids': selected_politician_ids, 
-            'selected_politician_names': selected_politician_names,
+            'selected_politician_ids': selected_politician_ids,
+            'selected_politician_names': selected_politician_names, 
             'weekly_df': weekly_df_multiple,
             'weekly_trend_img_base64': weekly_trend_img_base64,
             'df_display_ready': df_display_ready
@@ -382,17 +393,25 @@ def dashboard():
         
         selected_politician_ids_str = request.args.getlist('politician_ids_similarity')
         selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
-        if not selected_politician_ids and not df_all_for_selection.empty and "All" not in request.args.get('politician_select_mode_similarity', ''):
-            selected_politician_ids = df_all_for_selection['politician_id'].head(min(5, len(df_all_for_selection))).tolist()
-        elif "All" in request.args.get('politician_select_mode_similarity', '') and not df_all_for_selection.empty:
-             selected_politician_ids = df_all_for_selection['politician_id'].tolist()
+
+        if not selected_politician_ids_str and not df_all_for_selection.empty:
+             if not df_all_for_selection.empty:
+                selected_politician_ids = df_all_for_selection['politician_id'].head(min(5, len(df_all_for_selection))).tolist()
+        
+        ids_for_heatmap_calc = []
+        if "All" in request.args.get('politician_select_mode_similarity', '') and not df_all_for_selection.empty:
+             ids_for_heatmap_calc = df_all_for_selection['politician_id'].tolist()
+        else:
+             ids_for_heatmap_calc = selected_politician_ids
 
         heatmap_img_base64 = None
         similarity_df_valence_html = None
         df_for_similarity_calc = pd.DataFrame()
-        if selected_politician_ids and not df_all_for_selection.empty:
-            df_selected_full = df_all_for_selection[df_all_for_selection['politician_id'].isin(selected_politician_ids)]
-            df_for_similarity_calc = df_selected_full.head(MAX_HEATMAP_POLITICIANS_CONST).copy() if len(df_selected_full) > MAX_HEATMAP_POLITICIANS_CONST else df_selected_full.copy()
+        
+        if ids_for_heatmap_calc and not df_all_for_selection.empty:
+            df_selected_full = df_all_for_selection[df_all_for_selection['politician_id'].isin(ids_for_heatmap_calc)]
+            df_for_similarity_calc = df_selected_full.head(MAX_HEATMAP_POLITICIANS_CONST).copy()
+            
             if not df_for_similarity_calc.empty and len(df_for_similarity_calc) > 1:
                 names = df_for_similarity_calc['politician_name'].tolist()
                 vectors = df_for_similarity_calc[['approve_percent', 'neutral_percent', 'disapprove_percent']].values
@@ -402,26 +421,44 @@ def dashboard():
                     heatmap_buf = plot_similarity_heatmap_to_image(sim_df, title="Sentiment Similarity Matrix")
                     heatmap_img_base64 = get_image_as_base64(heatmap_buf)
                     similarity_df_valence_html = sim_df.style.format("{:.3f}").to_html(classes='styled-table', border=0)
+        
         similarity_data_dict = {
-            'available_politicians': available_politicians_for_similarity,
-            'selected_politician_ids': selected_politician_ids,
+            'available_politicians': available_politicians_for_similarity, 
+            'selected_politician_ids': selected_politician_ids, 
             'df_for_similarity_calc': df_for_similarity_calc,
             'heatmap_img_base64': heatmap_img_base64,
             'similarity_df_html': similarity_df_valence_html,
             'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST
         }
-    elif active_tab == 'dataset': # New tab logic
+    elif active_tab == 'dataset':
         metrics = fetch_dataset_metrics(engine)
         dataset_data_dict = {
             'metrics': metrics
         }
+    elif active_tab == 'feed': # Renamed tab
+        feed_df = fetch_feed_updates(engine, limit=50) 
+        
+        feed_list_for_template = []
+        if not feed_df.empty:
+            feed_list_for_template = feed_df.to_dict(orient='records')
+            for item in feed_list_for_template:
+                if isinstance(item.get('Timestamp'), pd.Timestamp):
+                    item['Timestamp'] = item['Timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(item.get('Timestamp'), datetime.datetime):
+                    item['Timestamp'] = item['Timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        feed_data_dict = { # Renamed dictionary
+            'latest_feed_items': feed_list_for_template 
+        }
+
 
     return render_template('index.html',
                            active_tab=active_tab,
                            approval_data=approval_data_dict,
                            trends_data=trends_data_dict,
                            similarity_data=similarity_data_dict,
-                           dataset_data=dataset_data_dict, # Pass new data dict
+                           dataset_data=dataset_data_dict,
+                           feed_data=feed_data_dict, # Pass renamed dict
                            engine_available=bool(engine)
                            )
 
