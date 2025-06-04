@@ -66,13 +66,13 @@
             // Initialize slider values on page load if the slider is present
             // This code will run on every page, but only act if the elements exist.
             
-            // For Approval Tab Slider (if it exists on the current page)
-            const approvalSlider = document.getElementById('min_votes_slider_approval');
-            const approvalOutput = document.getElementById('slider_value_approval');
-            if (approvalSlider && approvalOutput) {
-                approvalOutput.innerHTML = approvalSlider.value;
+            // For sentiment Tab Slider (if it exists on the current page)
+            const sentimentSlider = document.getElementById('min_votes_slider_sentiment');
+            const sentimentOutput = document.getElementById('slider_value_sentiment');
+            if (sentimentSlider && sentimentOutput) {
+                sentimentOutput.innerHTML = sentimentSlider.value;
                 // No need for active_tab check here if the element IDs are unique
-                // and only appear on the approval tab's content.
+                // and only appear on the sentiment tab's content.
             }
 
             // If you have other sliders on other tabs, add their initialization here:

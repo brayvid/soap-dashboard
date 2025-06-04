@@ -128,7 +128,7 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
         app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}\nQuery was: {query_with_final_order_by}")
         return pd.DataFrame()
     
-def fetch_weekly_approval_trends_for_selected_politicians(_engine, politician_ids_list):
+def fetch_weekly_sentiment_trends_for_selected_politicians(_engine, politician_ids_list):
     if not _engine or not politician_ids_list: return pd.DataFrame()
     try:
         safe_politician_ids = tuple(map(int, politician_ids_list))
@@ -164,7 +164,7 @@ def fetch_weekly_approval_trends_for_selected_politicians(_engine, politician_id
         if 'week_start_date' in df.columns: df['week_start_date'] = pd.to_datetime(df['week_start_date'], errors='coerce')
         return df
     except Exception as e: 
-        app.logger.error(f"Error in fetch_weekly_approval_trends_for_selected_politicians: {e}")
+        app.logger.error(f"Error in fetch_weekly_sentiment_trends_for_selected_politicians: {e}")
         return pd.DataFrame()
 
 def fetch_dataset_metrics(_engine):
@@ -306,16 +306,16 @@ def dashboard():
     if not engine:
         return render_template('error.html', message="CRITICAL: Database connection failed. Dashboard cannot operate.")
 
-    active_tab = request.args.get('tab', 'approval')
+    active_tab = request.args.get('tab', 'sentiment')
     politicians_list_df = fetch_politicians_list(engine)
     
-    approval_data_dict = {}
+    sentiment_data_dict = {}
     trends_data_dict = {}
     similarity_data_dict = {}
     dataset_data_dict = {}
     feed_data_dict = {} # Renamed from updates_data_dict
 
-    if active_tab == 'approval':
+    if active_tab == 'sentiment':
         min_votes_param = request.args.get('min_votes', '10')
         min_votes = int(min_votes_param) if min_votes_param.isdigit() else 10
         df_sentiment_dist = fetch_sentiment_distribution_per_politician(
@@ -330,10 +330,10 @@ def dashboard():
             if plotted_categories:
                 dist_img_buf = plot_stacked_horizontal_bar_to_image(
                     df_sentiment_dist, categories=plotted_categories, category_colors=category_colors,
-                    title='Approval Rating Distribution', xlabel='Percentage of Votes (%)', ylabel=''
+                    title='Sentiment Distribution', xlabel='Percentage of Votes (%)', ylabel=''
                 )
                 dist_img_base64 = get_image_as_base64(dist_img_buf)
-        approval_data_dict = {
+        sentiment_data_dict = {
             'min_votes_current': min_votes,
             'df_sentiment_dist': df_sentiment_dist,
             'dist_img_base64': dist_img_base64
@@ -360,7 +360,7 @@ def dashboard():
 
         if selected_politician_ids_for_query and not politicians_list_df.empty:
             selected_politician_names = politicians_list_df[politicians_list_df['politician_id'].isin(selected_politician_ids_for_query)]['name'].tolist()
-            weekly_df_multiple = fetch_weekly_approval_trends_for_selected_politicians(engine, selected_politician_ids_for_query)
+            weekly_df_multiple = fetch_weekly_sentiment_trends_for_selected_politicians(engine, selected_politician_ids_for_query)
             if not weekly_df_multiple.empty and 'weekly_approval_rating_percent' in weekly_df_multiple.columns and weekly_df_multiple['weekly_approval_rating_percent'].notna().any():
                 weekly_trend_img_buf = plot_multiline_chart_to_image(
                     weekly_df_multiple, x_col='week_start_date', y_col='weekly_approval_rating_percent',
@@ -454,7 +454,7 @@ def dashboard():
 
     return render_template('index.html',
                            active_tab=active_tab,
-                           approval_data=approval_data_dict,
+                           sentiment_data=sentiment_data_dict,
                            trends_data=trends_data_dict,
                            similarity_data=similarity_data_dict,
                            dataset_data=dataset_data_dict,
