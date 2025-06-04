@@ -21,7 +21,7 @@ app = Flask(__name__)
 
 # --- Database Connection ---
 DEPLOY_ENV = os.environ.get('DEPLOY_ENV', 'DEVELOPMENT').upper()
-# app.logger.info(f"FLASK_ENV from os.environ: {os.environ.get('FLASK_ENV')}") 
+# app.logger.info(f"FLASK_ENV from os.environ: {os.environ.get('FLASK_ENV')}")
 # app.logger.info(f"DEPLOY_ENV set to: {DEPLOY_ENV}")
 
 
@@ -33,7 +33,7 @@ def get_env_var(var_name_prefix, key):
         return val
     else: # DEVELOPMENT or other
         val = os.environ.get(var_to_check)
-        app.logger.info(f"[get_env_var DEV] Tried {var_to_check}, got: {val if val else 'None'}")
+        # app.logger.info(f"[get_env_var DEV] Tried {var_to_check}, got: {val if val else 'None'}") # Can be verbose
         return val
 
 def get_engine():
@@ -89,20 +89,29 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
                 CASE WHEN w.sentiment_score > {approve_threshold} THEN 'Approve'
                      WHEN w.sentiment_score < {disapprove_threshold} THEN 'Disapprove'
                      ELSE 'Neutral' END AS sentiment_category
-            FROM votes AS v JOIN words AS w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL 
+            FROM votes AS v JOIN words AS w ON v.word_id = w.word_id -- No IS NOT NULL here, let all words contribute to total votes if needed
         ), PoliticianSentimentCounts AS (
             SELECT politician_id, sentiment_category, COUNT(*) AS category_count
-            FROM VoteSentimentCategories GROUP BY politician_id, sentiment_category
-        ), PoliticianTotalScorableVotes AS (
-            SELECT politician_id, COUNT(*) AS total_votes FROM VoteSentimentCategories GROUP BY politician_id
+            FROM VoteSentimentCategories 
+            WHERE sentiment_category IN ('Approve', 'Disapprove', 'Neutral') -- Only count these for percentages
+            GROUP BY politician_id, sentiment_category
+        ), PoliticianTotalScorableVotes AS ( -- This counts votes linked to words that CAN be categorized (A,D,N based on score)
+            SELECT v.politician_id, COUNT(v.vote_id) AS total_votes 
+            FROM votes v JOIN words w ON v.word_id = w.word_id
+            WHERE w.sentiment_score IS NOT NULL -- Ensure only scorable votes contribute to this total for percentages
+            GROUP BY v.politician_id
         ), PoliticianPercentages AS (
-            SELECT p.politician_id, p.name AS politician_name, ptv.total_votes,
+            SELECT 
+                p.politician_id, 
+                p.name AS politician_name, 
+                COALESCE(ptv.total_votes, 0) AS total_votes, -- Use total_votes from PoliticianTotalScorableVotes
                 COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Approve' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS approve_percent,
                 COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Disapprove' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS disapprove_percent,
                 COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Neutral' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS neutral_percent
-            FROM politicians AS p JOIN PoliticianTotalScorableVotes AS ptv ON p.politician_id = ptv.politician_id
+            FROM politicians AS p 
+            LEFT JOIN PoliticianTotalScorableVotes AS ptv ON p.politician_id = ptv.politician_id
             LEFT JOIN PoliticianSentimentCounts AS psc ON p.politician_id = psc.politician_id
-            WHERE ptv.total_votes >= :min_votes_threshold 
+            WHERE COALESCE(ptv.total_votes, 0) >= :min_votes_threshold 
             GROUP BY p.politician_id, p.name, ptv.total_votes
         )
         SELECT 
@@ -128,7 +137,7 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
         app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}\nQuery was: {query_with_final_order_by}")
         return pd.DataFrame()
     
-def fetch_weekly_sentiment_trends_for_selected_politicians(_engine, politician_ids_list):
+def fetch_weekly_approval_rating(_engine, politician_ids_list):
     if not _engine or not politician_ids_list: return pd.DataFrame()
     try:
         safe_politician_ids = tuple(map(int, politician_ids_list))
@@ -166,7 +175,7 @@ def fetch_weekly_sentiment_trends_for_selected_politicians(_engine, politician_i
     except Exception as e: 
         app.logger.error(f"Error in fetch_weekly_sentiment_trends_for_selected_politicians: {e}")
         return pd.DataFrame()
-
+    
 def fetch_dataset_metrics(_engine):
     if not _engine:
         return {key: "N/A" for key in ["total_politicians", "total_words_scorable", "total_votes", "votes_date_range"]}
@@ -174,6 +183,7 @@ def fetch_dataset_metrics(_engine):
     try:
         with _engine.connect() as connection:
             metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or "N/A"
+            # Assuming "scorable words" are those with non-NULL sentiment_score, used by Tab 1 logic
             metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or "N/A"
             metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or "N/A"
             
@@ -188,7 +198,7 @@ def fetch_dataset_metrics(_engine):
         app.logger.error(f"Error fetching dataset metrics: {e}")
         return {key: "Error" for key in ["total_politicians", "total_words_scorable", "total_votes", "votes_date_range"]}
 
-def fetch_feed_updates(_engine, limit=50): # Renamed function
+def fetch_feed_updates(_engine, limit=50):
     if not _engine: return pd.DataFrame()
     query = text(f"""
         SELECT
@@ -306,17 +316,18 @@ def dashboard():
     if not engine:
         return render_template('error.html', message="CRITICAL: Database connection failed. Dashboard cannot operate.")
 
-    active_tab = request.args.get('tab', 'sentiment')
+    active_tab = request.args.get('tab', 'sentiment') # Default to 'sentiment' as the first tab
+    
     politicians_list_df = fetch_politicians_list(engine)
     
-    sentiment_data_dict = {}
-    trends_data_dict = {}
+    sentiment_tab_data = {} # For Tab 1: Sentiment Distribution
+    approval_tab_data = {}  # For Tab 2: Weekly Approval Rating (formerly Trends)
     similarity_data_dict = {}
     dataset_data_dict = {}
-    feed_data_dict = {} # Renamed from updates_data_dict
+    feed_data_dict = {} 
 
     if active_tab == 'sentiment':
-        min_votes_param = request.args.get('min_votes', '10')
+        min_votes_param = request.args.get('min_votes_sentiment', '10') # Unique query param
         min_votes = int(min_votes_param) if min_votes_param.isdigit() else 10
         df_sentiment_dist = fetch_sentiment_distribution_per_politician(
             engine, min_total_votes_threshold=min_votes, sort_by_total_votes=False
@@ -333,40 +344,41 @@ def dashboard():
                     title='Sentiment Distribution', xlabel='Percentage of Votes (%)', ylabel=''
                 )
                 dist_img_base64 = get_image_as_base64(dist_img_buf)
-        sentiment_data_dict = {
+        sentiment_tab_data = {
             'min_votes_current': min_votes,
             'df_sentiment_dist': df_sentiment_dist,
             'dist_img_base64': dist_img_base64
         }
-    elif active_tab == 'trends':
-        selected_politician_ids_str = request.args.getlist('politician_ids_trends')
+    elif active_tab == 'approval': 
+        selected_politician_ids_str = request.args.getlist('politician_ids_approval') 
         selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
 
-        if not selected_politician_ids_str and not politicians_list_df.empty:
+        if not selected_politician_ids_str and not politicians_list_df.empty: # Default selection
             trump_row = politicians_list_df[politicians_list_df['name'].str.contains("Donald Trump", case=False, na=False)]
             if not trump_row.empty:
                 selected_politician_ids = [int(trump_row['politician_id'].iloc[0])]
             elif not politicians_list_df.empty:
                 selected_politician_ids = [int(politicians_list_df['politician_id'].iloc[0])]
         
-        if "All" in request.args.get('politician_select_mode_trends', '') and not politicians_list_df.empty:
+        if "All" in request.args.get('politician_select_mode_approval', '') and not politicians_list_df.empty: 
             selected_politician_ids_for_query = politicians_list_df['politician_id'].tolist()
         else:
             selected_politician_ids_for_query = selected_politician_ids
 
         weekly_df_multiple = pd.DataFrame()
-        weekly_trend_img_base64 = None
+        weekly_approval_img_base64 = None 
         selected_politician_names = []
 
         if selected_politician_ids_for_query and not politicians_list_df.empty:
             selected_politician_names = politicians_list_df[politicians_list_df['politician_id'].isin(selected_politician_ids_for_query)]['name'].tolist()
-            weekly_df_multiple = fetch_weekly_sentiment_trends_for_selected_politicians(engine, selected_politician_ids_for_query)
+            weekly_df_multiple = fetch_weekly_approval_rating(engine, selected_politician_ids_for_query) 
+            
             if not weekly_df_multiple.empty and 'weekly_approval_rating_percent' in weekly_df_multiple.columns and weekly_df_multiple['weekly_approval_rating_percent'].notna().any():
-                weekly_trend_img_buf = plot_multiline_chart_to_image(
+                weekly_approval_img_buf = plot_multiline_chart_to_image( 
                     weekly_df_multiple, x_col='week_start_date', y_col='weekly_approval_rating_percent',
                     group_col='politician_name', title='Weekly Approval Rating', xlabel='Week Start Date', ylabel='Approval Rating (%)'
                 )
-                weekly_trend_img_base64 = get_image_as_base64(weekly_trend_img_buf)
+                weekly_approval_img_base64 = get_image_as_base64(weekly_approval_img_buf)
         
         df_display_ready = pd.DataFrame()
         if not weekly_df_multiple.empty:
@@ -374,13 +386,12 @@ def dashboard():
             actual_cols = [col for col in cols_to_display if col in weekly_df_multiple.columns]
             if actual_cols: df_display_ready = weekly_df_multiple[actual_cols].copy()
         
-        trends_data_dict = {
-            'all_politicians': politicians_list_df,
-            'selected_politician_ids': selected_politician_ids,
-            'selected_politician_names': selected_politician_names, 
-            'weekly_df': weekly_df_multiple,
-            'weekly_trend_img_base64': weekly_trend_img_base64,
-            'df_display_ready': df_display_ready
+        approval_tab_data = { 
+            'all_politicians': politicians_list_df, # For the dropdown
+            'selected_politician_ids': selected_politician_ids, # For pre-selecting in dropdown
+            'selected_politician_names': selected_politician_names, # For display in title
+            'df_display_ready': df_display_ready, 
+            'weekly_approval_img_base64': weekly_approval_img_base64
         }
     elif active_tab == 'similarity':
         MAX_HEATMAP_POLITICIANS_CONST = 30
@@ -435,9 +446,8 @@ def dashboard():
         dataset_data_dict = {
             'metrics': metrics
         }
-    elif active_tab == 'feed': # Renamed tab
+    elif active_tab == 'feed':
         feed_df = fetch_feed_updates(engine, limit=50) 
-        
         feed_list_for_template = []
         if not feed_df.empty:
             feed_list_for_template = feed_df.to_dict(orient='records')
@@ -446,19 +456,17 @@ def dashboard():
                     item['Timestamp'] = item['Timestamp'].strftime('%Y-%m-%d %H:%M:%S')
                 elif isinstance(item.get('Timestamp'), datetime.datetime):
                     item['Timestamp'] = item['Timestamp'].strftime('%Y-%m-%d %H:%M:%S')
-        
-        feed_data_dict = { # Renamed dictionary
+        feed_data_dict = {
             'latest_feed_items': feed_list_for_template 
         }
 
-
     return render_template('index.html',
                            active_tab=active_tab,
-                           sentiment_data=sentiment_data_dict,
-                           trends_data=trends_data_dict,
+                           sentiment_data=sentiment_tab_data, 
+                           approval_data=approval_tab_data, 
                            similarity_data=similarity_data_dict,
                            dataset_data=dataset_data_dict,
-                           feed_data=feed_data_dict, # Pass renamed dict
+                           feed_data=feed_data_dict, 
                            engine_available=bool(engine)
                            )
 

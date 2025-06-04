@@ -6,13 +6,13 @@
     <nav class="dashboard-tabs" style="margin-bottom: 20px; text-align: center;">
         <a href="{{ url_for('dashboard', tab='sentiment') }}" 
            class="tab-link {% if active_tab == 'sentiment' %}active{% endif %}">Sentiment</a>
-        <a href="{{ url_for('dashboard', tab='trends') }}" 
-           class="tab-link {% if active_tab == 'trends' %}active{% endif %}">Trends</a>
+        <a href="{{ url_for('dashboard', tab='approval') }}"
+           class="tab-link {% if active_tab == 'approval' %}active{% endif %}">Approval</a>
         <a href="{{ url_for('dashboard', tab='similarity') }}" 
            class="tab-link {% if active_tab == 'similarity' %}active{% endif %}">Similarity</a>
         <a href="{{ url_for('dashboard', tab='dataset') }}"
            class="tab-link {% if active_tab == 'dataset' %}active{% endif %}">Dataset</a>
-        <a href="{{ url_for('dashboard', tab='feed') }}"  {# Renamed tab link #}
+        <a href="{{ url_for('dashboard', tab='feed') }}"
            class="tab-link {% if active_tab == 'feed' %}active{% endif %}">Feed</a>
     </nav>
     <hr style="margin-bottom: 20px;">
@@ -31,7 +31,7 @@
                         <span id="slider_value_sentiment" class="slider-current-value" style="font-weight: bold;">{{ sentiment_data.min_votes_current }}</span>
                     </div>
                     
-                    <input type="range" class="form-range-slider" id="min_votes_slider_sentiment" name="min_votes" 
+                    <input type="range" class="form-range-slider" id="min_votes_slider_sentiment" name="min_votes_sentiment" 
                         min="1" max="100" value="{{ sentiment_data.min_votes_current }}" step="1" 
                         oninput="updateSliderValue('min_votes_slider_sentiment', 'slider_value_sentiment')"
                         onchange="this.form.submit()">
@@ -40,7 +40,7 @@
 
             {% if sentiment_data.dist_img_base64 %}
                 <div class="plot-container" style="text-align: center; margin: 1.5rem 0;">
-                    <img src="data:image/png;base64,{{ sentiment_data.dist_img_base64 }}" alt="sentiment Distribution Chart" style="max-width: 100%; height: auto;">
+                    <img src="data:image/png;base64,{{ sentiment_data.dist_img_base64 }}" alt="Sentiment Distribution Chart" style="max-width: 100%; height: auto;">
                 </div>
             {% elif sentiment_data.min_votes_current %}
                 <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">No politicians meet threshold of {{ sentiment_data.min_votes_current }} scorable votes for distribution.</div>
@@ -49,7 +49,7 @@
             {% endif %}
 
             <details class="data-expander">
-                <summary>View sentiment Rating Data</summary>
+                <summary>View Sentiment Distribution Data</summary>
                 {% if sentiment_data.df_sentiment_dist is not none and not sentiment_data.df_sentiment_dist.empty %}
                     <div class="table-scroll-wrapper">
                         {{ sentiment_data.df_sentiment_dist[['politician_name', 'approve_percent', 'neutral_percent', 'disapprove_percent', 'total_votes']].to_html(classes='styled-table data-table', index=False, formatters={'approve_percent': '{:.1f}%'.format, 'neutral_percent': '{:.1f}%'.format, 'disapprove_percent': '{:.1f}%'.format}) | safe }}
@@ -60,19 +60,19 @@
             </details>
         </section>
 
-    {% elif active_tab == 'trends' %}
-        <section id="weekly-trends-content">
-            <h2>Weekly Trends & Comparison</h2>
+    {% elif active_tab == 'approval' %}
+        <section id="weekly-approval-content"> 
+            <h2>Weekly Approval Rating</h2>
             
             <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
-                <input type="hidden" name="tab" value="trends">
+                <input type="hidden" name="tab" value="approval">
                 <div class="form-group" style="margin-bottom: 1rem;">
-                    <label for="politician_multiselector_trends" class="form-label">Select Politicians:</label>
-                    <p><small><input type="checkbox" name="politician_select_mode_trends" value="All" {% if 'All' in request.args.get('politician_select_mode_trends', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available</small></p>
-                    <select multiple class="form-multiselect" id="politician_multiselector_trends" name="politician_ids_trends" size="8">
-                        {% if trends_data.all_politicians is not none and not trends_data.all_politicians.empty %}
-                            {% for pol in trends_data.all_politicians.to_dict(orient='records') %}
-                                <option value="{{ pol.politician_id }}" {% if pol.politician_id in trends_data.selected_politician_ids %}selected{% endif %}>
+                    <label for="politician_multiselector_approval" class="form-label">Select Politicians:</label>
+                    <p><small><input type="checkbox" name="politician_select_mode_approval" value="All" {% if 'All' in request.args.get('politician_select_mode_approval', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available</small></p>
+                    <select multiple class="form-multiselect" id="politician_multiselector_approval" name="politician_ids_approval" size="8">
+                        {% if approval_data.all_politicians is not none and not approval_data.all_politicians.empty %}
+                            {% for pol in approval_data.all_politicians.to_dict(orient='records') %}
+                                <option value="{{ pol.politician_id }}" {% if pol.politician_id in approval_data.selected_politician_ids %}selected{% endif %}>
                                     {{ pol.name }}
                                 </option>
                             {% endfor %}
@@ -82,35 +82,34 @@
                     </select>
                     <small class="form-text-hint">Hold Ctrl/Cmd to select multiple.</small>
                 </div>
-                <button type="submit" class="button-primary">Update Trend Chart</button>
+                <button type="submit" class="button-primary">Update Approval Chart</button>
             </form>
 
-            {% if trends_data.selected_politician_names %}
+            {% if approval_data.selected_politician_names %}
                 <h3 style="margin-top: 1.5rem;">
-                {% if trends_data.selected_politician_names|length == 1 %}Trend for: {{ trends_data.selected_politician_names[0] }}
-                {% elif trends_data.selected_politician_names|length > 1 %}Trend Comparison for {{ trends_data.selected_politician_names|length }} politicians
+                {% if approval_data.selected_politician_names|length == 1 %}Approval Trend for: {{ approval_data.selected_politician_names[0] }}
+                {% elif approval_data.selected_politician_names|length > 1 %}Approval Trend Comparison for {{ approval_data.selected_politician_names|length }} politicians
                 {% endif %}
                 </h3>
             {% endif %}
 
-
-            {% if trends_data.weekly_trend_img_base64 %}
+            {% if approval_data.weekly_approval_img_base64 %}
                 <div class="plot-container" style="text-align: center; margin: 1.5rem 0;">
-                    <img src="data:image/png;base64,{{ trends_data.weekly_trend_img_base64 }}" alt="Weekly Trend Chart" style="max-width: 100%; height: auto;">
+                    <img src="data:image/png;base64,{{ approval_data.weekly_approval_img_base64 }}" alt="Weekly Approval Chart" style="max-width: 100%; height: auto;">
                 </div>
-            {% elif trends_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_trends', '') %}
-                <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">No weekly sentiment rating data for the selected politician(s).</div>
-            {% elif trends_data.all_politicians is not none and not trends_data.all_politicians.empty %}
+            {% elif approval_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_approval', '') %}
+                <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">No weekly approval rating data for the selected politician(s).</div>
+            {% elif approval_data.all_politicians is not none and not approval_data.all_politicians.empty %}
                 <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">ℹ️ Select politician(s) above. Default is Donald Trump if available.</div>
             {% else %}
                 <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">Waiting for data...</div>
             {% endif %}
 
             <details class="data-expander">
-                <summary>View Weekly Trend Data</summary>
-                {% if trends_data.df_display_ready is not none and not trends_data.df_display_ready.empty %}
+                <summary>View Weekly Approval Data</summary>
+                {% if approval_data.df_display_ready is not none and not approval_data.df_display_ready.empty %}
                     <div class="table-scroll-wrapper">
-                        {{ trends_data.df_display_ready.to_html(classes='styled-table data-table', index=False, formatters={'weekly_sentiment_rating_percent': '{:.0f}%'.format, 'week_start_date': '{:%Y-%m-%d}'.format}) | safe }}
+                        {{ approval_data.df_display_ready.to_html(classes='styled-table data-table', index=False, formatters={'weekly_approval_rating_percent': '{:.0f}%'.format, 'week_start_date': '{:%Y-%m-%d}'.format}) | safe }}
                     </div>
                 {% else %}
                     <p class="text-muted">No data to display.</p>
@@ -184,16 +183,16 @@
                 <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; margin-left: auto; margin-right: auto;">
                     <ul style="list-style-type: none; padding-left: 0;">
                         <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;"> 
-                            <strong>Total Politicians:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_politicians }}</span>
+                            <strong>Politicians:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_politicians }}</span>
                         </li>
                         <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Total Scorable Words:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_words_scorable }}</span>
+                            <strong>Unique Words:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_words_scorable }}</span>
                         </li>
                         <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Total Votes Recorded:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_votes }}</span>
+                            <strong>Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_votes }}</span>
                         </li>
                         <li style="font-size: 1.1em; padding: 8px; overflow: hidden;">
-                            <strong>Vote Data Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.votes_date_range }}</span>
+                            <strong>Data Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.votes_date_range }}</span>
                         </li>
                     </ul>
                 </div>
@@ -203,15 +202,14 @@
                 <p class="text-muted">Could not retrieve dataset metrics at this time.</p>
             {% endif %}
         </section>
-    {# --- FEED TAB CONTENT --- #}
-    {% elif active_tab == 'feed' %} {# Renamed active_tab condition #}
-        <section id="feed-content"> {# Renamed section id #}
+    {% elif active_tab == 'feed' %}
+        <section id="feed-content"> 
             <h2>Latest Activity Feed</h2>
             <p>Shows the most recent votes recorded in the system.</p>
 
-            {% if feed_data and feed_data.latest_feed_items %} {# Renamed data dictionary key #}
-                <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 600px;"> {# Renamed class for wrapper #}
-                    <table class="styled-table data-table feed-table"> {# Renamed class for table #}
+            {% if feed_data and feed_data.latest_feed_items %} 
+                <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 600px;"> 
+                    <table class="styled-table data-table feed-table"> 
                         <thead>
                             <tr>
                                 <th>Word</th>
@@ -220,7 +218,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in feed_data.latest_feed_items %} {# Renamed data dictionary key #}
+                            {% for item in feed_data.latest_feed_items %} 
                             <tr>
                                 <td>{{ item['Word'] }}</td>
                                 <td>{{ item['Politician'] }}</td>
@@ -250,11 +248,13 @@ function updateSliderValue(sliderId, outputId) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const sentimentSlider = document.getElementById('min_votes_slider_sentiment');
+    // Script for Tab 1 (Sentiment)
+    const sentimentSlider = document.getElementById('min_votes_slider_sentiment'); 
     const sentimentOutput = document.getElementById('slider_value_sentiment');
     if (sentimentSlider && sentimentOutput) { 
         sentimentOutput.innerHTML = sentimentSlider.value;
     }
+    // No slider currently on Tab 2 (Approval)
 });
 </script>
 {% endblock %}
