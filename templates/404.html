@@ -20,11 +20,13 @@
 </head>
 <body>
   <!-- Navbar -->
-  <nav class="navbar">
-    <a href="{{ url_for('dashboard') }}">Home</a>
-    <div class="navbar-title">Social Polling</div>
-    <div class="spacer"></div>
-  </nav>
+<nav class="navbar">
+    <a href="https://use.soap.fyi">Home</a>
+    <div class="navbar-title">Soap Dashboard</div>
+    <div class="navbar-right-menu">
+        <a href="/">Dash</a>
+    </div>
+</nav>
 
   <!-- 404 Content -->
   <main style="text-align: center; padding: 4rem 1rem;">
@@ -40,7 +42,7 @@
       <p style="font-size: 1.25rem; margin-bottom: 2rem;">
         Oops! The page you're looking for doesn't exist.
       </p>
-      <a href="{{ url_for('dashboard') }}" style="color: #76B0DF; font-weight: bold; text-decoration: none;">← Back to Home</a>
+      <a href="{{ url_for('dashboard') }}" style="color: #76B0DF; font-weight: bold; text-decoration: none;">← Back to Dashboard</a>
     </section>
   </main>
 
