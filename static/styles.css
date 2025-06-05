@@ -162,3 +162,10 @@ body {
     .styled-table th, .styled-table td { font-size: 12px; padding: 4px; }
     .feed-table th, .feed-table td { font-size: 10px; padding: 3px 4px; }
 }
+
+  /* ---- START: Added rule for the "Click a word to agree" h2 ---- */
+  .footer p {
+    font-size: 0.8rem; /* Default h2 is often 1.5em (e.g., 24px). This makes it ~20px. */
+    /* You can adjust 1.25rem to 1.2rem or 1.15rem if you want it even smaller */
+  }
+  /* ---- END: Added rule ---- */
