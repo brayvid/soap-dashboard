@@ -20,7 +20,7 @@
     {% if active_tab == 'sentiment' %} 
         <section id="sentiment-ratings-content">
             <h2>Sentiment Distribution</h2>
-            <p>Shows 'Approve', 'Neutral', 'Disapprove' votes based on word sentiment.</p>
+            <p>Shows 'Positive', 'Negative', 'Neutral' word sentiment.</p>
                 
             <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
                 <input type="hidden" name="tab" value="sentiment">
@@ -52,7 +52,7 @@
                 <summary>View Sentiment Distribution Data</summary>
                 {% if sentiment_data.df_sentiment_dist is not none and not sentiment_data.df_sentiment_dist.empty %}
                     <div class="table-scroll-wrapper">
-                        {{ sentiment_data.df_sentiment_dist[['politician_name', 'approve_percent', 'neutral_percent', 'disapprove_percent', 'total_votes']].to_html(classes='styled-table data-table', index=False, formatters={'approve_percent': '{:.1f}%'.format, 'neutral_percent': '{:.1f}%'.format, 'disapprove_percent': '{:.1f}%'.format}) | safe }}
+                        {{ sentiment_data.df_sentiment_dist[['politician_name', 'positive_percent', 'neutral_percent', 'negative_percent', 'total_votes']].to_html(classes='styled-table data-table', index=False, formatters={'positive_percent': '{:.1f}%'.format, 'neutral_percent': '{:.1f}%'.format, 'negative_percent': '{:.1f}%'.format}) | safe }}
                     </div>
                 {% else %}
                     <p class="text-muted">No data to display.</p>
@@ -189,7 +189,13 @@
                             <strong>Unique Words:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_words_scorable }}</span>
                         </li>
                         <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_votes }}</span>
+                            <strong>Total Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.total_votes }}</span>
+                        </li>
+                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                            <strong>Net Sentiment:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.net_sentiment_sum_all_submissions }}</span>
+                        </li>
+                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                            <strong>Net Sentiment/Submission:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.average_sentiment_score_all_submissions }}</span>
                         </li>
                         <li style="font-size: 1.1em; padding: 8px; overflow: hidden;">
                             <strong>Data Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.votes_date_range }}</span>

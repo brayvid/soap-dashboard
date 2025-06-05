@@ -105,8 +105,8 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
                 p.politician_id, 
                 p.name AS politician_name, 
                 COALESCE(ptv.total_votes, 0) AS total_votes, -- Use total_votes from PoliticianTotalScorableVotes
-                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Approve' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS approve_percent,
-                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Disapprove' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS disapprove_percent,
+                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Approve' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS positive_percent,
+                COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Disapprove' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS negative_percent,
                 COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Neutral' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS neutral_percent
             FROM politicians AS p 
             LEFT JOIN PoliticianTotalScorableVotes AS ptv ON p.politician_id = ptv.politician_id
@@ -117,11 +117,11 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
         SELECT 
             politician_id, 
             politician_name,
-            approve_percent,
-            disapprove_percent,
+            positive_percent,
+            negative_percent,
             neutral_percent,
             total_votes,
-            (approve_percent - disapprove_percent) AS calculated_ranking_score
+            (positive_percent - negative_percent) AS calculated_ranking_score
         FROM PoliticianPercentages
         {order_by_clause_final};
     """)
@@ -129,7 +129,7 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
     try:
         with _engine.connect() as connection:
             df = pd.read_sql(query_with_final_order_by, connection, params={'min_votes_threshold': min_total_votes_threshold})
-        for col in ['approve_percent', 'disapprove_percent', 'neutral_percent', 'total_votes', 'calculated_ranking_score']:
+        for col in ['positive_percent', 'negative_percent', 'neutral_percent', 'total_votes', 'calculated_ranking_score']:
             if col in df.columns: 
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
@@ -177,13 +177,19 @@ def fetch_weekly_approval_rating(_engine, politician_ids_list):
         return pd.DataFrame()
     
 def fetch_dataset_metrics(_engine):
+    metric_keys = [
+        "total_politicians", "total_words_scorable", "total_votes", "votes_date_range",
+        "net_sentiment_sum_all_submissions", "average_sentiment_score_all_submissions",
+        "net_approval_rating_percent_all_submissions", "votes_contributing_to_sentiment_metrics"
+    ]
+
     if not _engine:
-        return {key: "N/A" for key in ["total_politicians", "total_words_scorable", "total_votes", "votes_date_range"]}
+        return {key: "N/A" for key in metric_keys}
+
     metrics = {}
     try:
         with _engine.connect() as connection:
             metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or "N/A"
-            # Assuming "scorable words" are those with non-NULL sentiment_score, used by Tab 1 logic
             metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or "N/A"
             metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or "N/A"
             
@@ -193,42 +199,49 @@ def fetch_dataset_metrics(_engine):
                 metrics["votes_date_range"] = f"{min_d.strftime('%Y-%m-%d')} to {max_d.strftime('%Y-%m-%d')}" if min_d != max_d else f"On {min_d.strftime('%Y-%m-%d')}"
             else:
                 metrics["votes_date_range"] = "N/A"
+
+            # New metrics for overall sentiment of all submissions
+            sentiment_query = text("""
+                SELECT
+                    SUM(w.sentiment_score) AS total_sentiment_sum,
+                    COUNT(v.vote_id) AS scorable_votes_count
+                FROM
+                    votes v
+                JOIN
+                    words w ON v.word_id = w.word_id
+                WHERE
+                    w.sentiment_score IS NOT NULL;
+            """)
+            sentiment_res = connection.execute(sentiment_query).fetchone()
+
+            if sentiment_res and sentiment_res.scorable_votes_count is not None and sentiment_res.scorable_votes_count > 0:
+                total_sum = sentiment_res.total_sentiment_sum  # This will be numeric if scorable_votes_count > 0
+                count_votes = sentiment_res.scorable_votes_count
+
+                metrics["net_sentiment_sum_all_submissions"] = f"{total_sum:.2f}"
+                metrics["votes_contributing_to_sentiment_metrics"] = count_votes
+
+                avg_score = total_sum / count_votes
+                metrics["average_sentiment_score_all_submissions"] = f"{avg_score:.4f}" # Raw average, e.g., -1.0 to 1.0
+
+                # Calculate overall approval rating % (0-100 scale)
+                # Assumes avg_score is typically in [-1, 1] range
+                approval_percent = (((avg_score / 2.0) + 0.5) * 100.0)
+                metrics["net_approval_rating_percent_all_submissions"] = f"{approval_percent:.2f}%"
+            else:
+                metrics["net_sentiment_sum_all_submissions"] = "N/A"
+                metrics["votes_contributing_to_sentiment_metrics"] = 0
+                metrics["average_sentiment_score_all_submissions"] = "N/A"
+                metrics["net_approval_rating_percent_all_submissions"] = "N/A"
+        
+        # Ensure all defined metric keys are present in the returned dictionary
+        for key in metric_keys:
+            if key not in metrics:
+                metrics[key] = "N/A"
         return metrics
     except Exception as e:
         app.logger.error(f"Error fetching dataset metrics: {e}")
-        return {key: "Error" for key in ["total_politicians", "total_words_scorable", "total_votes", "votes_date_range"]}
-
-def fetch_feed_updates(_engine, limit=50):
-    if not _engine: return pd.DataFrame()
-    query = text(f"""
-        SELECT
-            w.word AS "Word",
-            p.name AS "Politician",
-            v.created_at AS "Timestamp"
-        FROM
-            votes v
-        JOIN
-            words w ON v.word_id = w.word_id
-        JOIN
-            politicians p ON v.politician_id = p.politician_id
-        ORDER BY
-            v.created_at DESC
-        LIMIT :limit_val;
-    """)
-    try:
-        with _engine.connect() as connection:
-            df = pd.read_sql(query, connection, params={'limit_val': limit})
-        
-        if not df.empty:
-            if 'Timestamp' in df.columns:
-                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-            
-            if 'Word' in df.columns:
-                df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
-        return df
-    except Exception as e:
-        app.logger.error(f"Error fetching feed updates: {e}\nQuery: {query}")
-        return pd.DataFrame()
+        return {key: "Error" for key in metric_keys}
 
 # --- Plotting Functions ---
 def plot_stacked_horizontal_bar_to_image(df, categories, category_colors, title, xlabel, ylabel, top_n=20, decimal_places=1):
@@ -310,6 +323,39 @@ def get_image_as_base64(img_buf):
         return base64.b64encode(img_buf.read()).decode('utf-8')
     return None
 
+def fetch_feed_updates(_engine, limit=50):
+    if not _engine: return pd.DataFrame()
+    query = text(f"""
+        SELECT
+            w.word AS "Word",
+            p.name AS "Politician",
+            v.created_at AS "Timestamp"
+        FROM
+            votes v
+        JOIN
+            words w ON v.word_id = w.word_id
+        JOIN
+            politicians p ON v.politician_id = p.politician_id
+        ORDER BY
+            v.created_at DESC
+        LIMIT :limit_val;
+    """)
+    try:
+        with _engine.connect() as connection:
+            df = pd.read_sql(query, connection, params={'limit_val': limit})
+        
+        if not df.empty:
+            if 'Timestamp' in df.columns:
+                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+            
+            if 'Word' in df.columns:
+                df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+        return df
+    except Exception as e:
+        app.logger.error(f"Error fetching feed updates: {e}\nQuery: {query}")
+        return pd.DataFrame()
+    
+
 # --- Main Dashboard Route ---
 @app.route('/')
 def dashboard():
@@ -334,8 +380,8 @@ def dashboard():
         )
         dist_img_base64 = None
         if not df_sentiment_dist.empty:
-            sentiment_categories = ['approve_percent', 'neutral_percent', 'disapprove_percent']
-            category_colors_map = {'approve_percent': 'mediumseagreen', 'neutral_percent': 'lightgrey', 'disapprove_percent': 'lightcoral'}
+            sentiment_categories = ['positive_percent', 'neutral_percent', 'negative_percent']
+            category_colors_map = {'positive_percent': 'mediumseagreen', 'neutral_percent': 'lightgrey', 'negative_percent': 'lightcoral'}
             plotted_categories = [cat for cat in sentiment_categories if cat in df_sentiment_dist.columns]
             category_colors = [category_colors_map[cat] for cat in plotted_categories if cat in category_colors_map]
             if plotted_categories:
@@ -425,7 +471,7 @@ def dashboard():
             
             if not df_for_similarity_calc.empty and len(df_for_similarity_calc) > 1:
                 names = df_for_similarity_calc['politician_name'].tolist()
-                vectors = df_for_similarity_calc[['approve_percent', 'neutral_percent', 'disapprove_percent']].values
+                vectors = df_for_similarity_calc[['positive_percent', 'neutral_percent', 'negative_percent']].values
                 if vectors.ndim == 2 and vectors.shape[0] > 1:
                     sim_matrix = cosine_similarity(vectors)
                     sim_df = pd.DataFrame(sim_matrix, index=names, columns=names)
