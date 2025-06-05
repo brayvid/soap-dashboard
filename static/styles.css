@@ -1,5 +1,16 @@
 /* static/styles.css */
 
+html { /* ADDED/MODIFIED */
+  box-sizing: border-box;
+  min-height: 100vh; /* Ensures HTML element can fill viewport height */
+  margin: 0;         /* Reset default browser margin */
+  padding: 0;        /* Reset default browser padding */
+}
+
+*, *::before, *::after { /* ADDED for universal box-sizing */
+  box-sizing: inherit;
+}
+
 body, html {
   margin: 0;
   padding: 0;
@@ -10,12 +21,18 @@ body, html {
 
 body {
   display: flex;
-  flex-direction: column; 
+  flex-direction: column;
   font-family: "Inter", "Segoe UI", sans-serif;
   background-color: #f8f8f8;
   color: #2e2e2e;
   padding-top: 68px; /* Default desktop padding, adjust after inspecting final navbar height */
-  box-sizing: border-box; 
+  /* box-sizing: border-box; /* Inherited from html */
+  min-height: 100vh; /* ADDED: Body must also be able to fill viewport height */
+  margin: 0;         /* Ensure no body margin from user agent */
+  /* No padding-bottom here unless you specifically want a space *below* the footer
+     when the footer is at the very bottom of the viewport.
+     If you want space *between* content and footer, that's handled by
+     the main content wrapper's bottom margin or the footer's top padding. */
 }
 
 .main-content-wrapper { padding: 1rem; flex-grow: 1; width: 100%; box-sizing: border-box; }
@@ -163,9 +180,22 @@ body {
     .feed-table th, .feed-table td { font-size: 10px; padding: 3px 4px; }
 }
 
-  /* ---- START: Added rule for the "Click a word to agree" h2 ---- */
-  .footer p {
-    font-size: 0.8rem; /* Default h2 is often 1.5em (e.g., 24px). This makes it ~20px. */
-    /* You can adjust 1.25rem to 1.2rem or 1.15rem if you want it even smaller */
-  }
-  /* ---- END: Added rule ---- */
+.footer {
+  margin-top: auto; /* This works with flex-grow on the main content */
+  padding: 10px 20px;
+  background-color: #f8f8f8;
+  text-align: center;
+  width: 100%;
+  /* box-sizing: border-box; /* Inherited */
+  color: #666;
+  flex-shrink: 0; /* ADDED: Good practice, ensures footer doesn't shrink */
+}
+
+/* ---- START: Added rule for the "Click a word to agree" h2 ---- */
+.footer p {
+  font-size: 0.8rem; /* Default h2 is often 1.5em (e.g., 24px). This makes it ~20px. */
+  /* You can adjust 1.25rem to 1.2rem or 1.15rem if you want it even smaller */
+}
+/* ---- END: Added rule ---- */
+
+  
