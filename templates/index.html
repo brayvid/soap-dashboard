@@ -63,7 +63,21 @@
     {% elif active_tab == 'approval' %}
         <section id="weekly-approval-content"> 
             <h2>Weekly Approval Rating</h2>
-            
+           <details class="data-expander" style="margin-bottom: 1.5rem; background-color: #f9f9f9; padding: 10px 15px; border-radius: 5px; border: 1px solid #eee;">
+                <summary style="font-weight: normal; color: #333; cursor: pointer;">How is Weekly Approval Rating calculated?</summary>
+                <div style="padding-top: 10px; font-size: 0.9em; line-height: 1.5;">
+                    <p>The Weekly Approval Rating (%) converts the average sentiment score of submissions for a politician in a given week (typically ranging from -1 for very negative to +1 for very positive) into a 0-100% scale.</p>
+                    <p style="margin-top: 8px;"><strong>Formula:</strong></p>
+                    <pre style="margin-top:5px; padding:8px; background-color:#eef5f9; border:1px solid #cce0f1; border-radius:4px; overflow-x:auto; text-align:left;"><code style="font-family: monospace; font-size: 0.95em;">Approval (%) = [ (AvgSentiment / 2) + 0.5 ] * 100</code></pre>
+                    <p style="margin-top: 8px;">Where:</p>
+                    <ul style="list-style-type: none; padding-left: 10px; margin-top: 5px;">
+                        <li><code>AvgSentiment</code> = (Sum of sentiment scores of all submissions in the week) / (Total number of submissions in the week).</li>
+                    </ul>
+                    <p style="margin-top: 8px; font-size:0.9em"><em>This maps an average sentiment of -1 to 0%, 0 to 50%, and +1 to 100% approval.</em></p>
+                </div>
+            </details>
+
+
             <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
                 <input type="hidden" name="tab" value="approval">
                 <div class="form-group" style="margin-bottom: 1rem;">
