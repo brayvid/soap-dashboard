@@ -50,7 +50,7 @@ def get_engine():
     db_config["port"] = get_env_var(prefix, "port") or 5432
 
     try:
-        db_connection_str = f'postgresql+psycopg2://{db_config["username"]}:{db_config["password"]}@{db_config["host"]}:{db_config["port"]}/{db_config["database"]}'
+        db_connection_str = f'postgresql+psycopg2://{db_config["username"]}:{db_config["password"]}@{db_config["host"]}:{db_config["port"]}/{db_config["database"]}?sslmode=require'
         engine = create_engine(db_connection_str)
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
