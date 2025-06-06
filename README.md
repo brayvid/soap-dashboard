@@ -137,5 +137,4 @@ web: gunicorn app:app --log-file=-
 ```
 
 ---
-Copyright 2024-2025 [soap.fyi](https://soap.fyi)
-
+<div style="text-align:center">&copy; Copyright 2024-2025 <a href="https://soap.fyi">soap.fyi</a>. All rights reserved.</div>
