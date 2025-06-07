@@ -270,7 +270,7 @@ def plot_stacked_horizontal_bar_to_image(df, categories, category_colors, title,
     fig.savefig(img_buf, format="png", bbox_inches='tight', dpi=100); img_buf.seek(0)
     plt.close(fig); return img_buf
 
-def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, ylabel, color_palette="tab10", decimal_places=0):
+def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, ylabel, color_palette="tab20", decimal_places=0):
     if df.empty or x_col not in df.columns or y_col not in df.columns or group_col not in df.columns or df[y_col].isnull().all(): return None
     unique_groups = df[group_col].nunique(); fig_height = max(6, min(12, 5 + unique_groups * 0.3)); fig_width = 14
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
