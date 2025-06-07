@@ -73,7 +73,7 @@ def fetch_politicians_list(_engine):
         app.logger.error(f"Error in fetch_politicians_list: {e}")
         return pd.DataFrame({'politician_id': [], 'name': []})
 
-def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_threshold=10, sort_by_total_votes=False):
+def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_threshold=20, sort_by_total_votes=False):
     if not _engine: return pd.DataFrame()
     approve_threshold = 0.1
     disapprove_threshold = -0.1
@@ -373,7 +373,7 @@ def dashboard():
     feed_data_dict = {} 
 
     if active_tab == 'sentiment':
-        min_votes_param = request.args.get('min_votes_sentiment', '10') # Unique query param
+        min_votes_param = request.args.get('min_votes_sentiment', '20') # Unique query param
         min_votes = int(min_votes_param) if min_votes_param.isdigit() else 10
         df_sentiment_dist = fetch_sentiment_distribution_per_politician(
             engine, min_total_votes_threshold=min_votes, sort_by_total_votes=False
