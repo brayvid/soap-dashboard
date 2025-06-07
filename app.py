@@ -374,7 +374,7 @@ def dashboard():
 
     if active_tab == 'sentiment':
         min_votes_param = request.args.get('min_votes_sentiment', '20') # Unique query param
-        min_votes = int(min_votes_param) if min_votes_param.isdigit() else 10
+        min_votes = int(min_votes_param) if min_votes_param.isdigit() else 20
         df_sentiment_dist = fetch_sentiment_distribution_per_politician(
             engine, min_total_votes_threshold=min_votes, sort_by_total_votes=False
         )
