@@ -8,6 +8,8 @@
            class="tab-link {% if active_tab == 'sentiment' %}active{% endif %}">Sentiment</a>
         <a href="{{ url_for('dashboard', tab='approval') }}"
            class="tab-link {% if active_tab == 'approval' %}active{% endif %}">Approval</a>
+        <a href="{{ url_for('dashboard', tab='top_word') }}"  {# NEW TAB LINK #}
+           class="tab-link {% if active_tab == 'top_word' %}active{% endif %}">Top Word</a>
         <a href="{{ url_for('dashboard', tab='similarity') }}" 
            class="tab-link {% if active_tab == 'similarity' %}active{% endif %}">Similarity</a>
         <a href="{{ url_for('dashboard', tab='dataset') }}"
@@ -17,6 +19,7 @@
     </nav>
     <hr style="margin-bottom: 20px;">
 
+    {# --- SENTIMENT TAB CONTENT --- #}
     {% if active_tab == 'sentiment' %} 
         <section id="sentiment-ratings-content">
             <h2>Sentiment Distribution</h2>
@@ -60,10 +63,11 @@
             </details>
         </section>
 
+    {# --- APPROVAL TAB CONTENT --- #}
     {% elif active_tab == 'approval' %}
         <section id="weekly-approval-content"> 
             <h2>Weekly Approval Rating</h2>
-           <details class="data-expander" style="margin-bottom: 1.5rem; background-color: #f9f9f9; padding: 10px 15px; border-radius: 5px; border: 1px solid #eee;">
+             <details class="data-expander" style="margin-bottom: 1.5rem; background-color: #f9f9f9; padding: 10px 15px; border-radius: 5px; border: 1px solid #eee;">
                 <summary style="font-weight: normal; color: #333; cursor: pointer;">How is Weekly Approval Rating calculated?</summary>
                 <div style="padding-top: 10px; font-size: 0.9em; line-height: 1.5;">
                     <p>The Weekly Approval Rating (%) converts the average sentiment score of submissions for a politician in a given week (typically ranging from -1 for very negative to +1 for very positive) into a 0-100% scale.</p>
@@ -76,7 +80,6 @@
                     <p style="margin-top: 8px; font-size:0.9em"><em>This maps an average sentiment of -1 to 0%, 0 to 50%, and +1 to 100% approval.</em></p>
                 </div>
             </details>
-
 
             <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
                 <input type="hidden" name="tab" value="approval">
@@ -130,17 +133,60 @@
                 {% endif %}
             </details>
         </section>
+
+    {# --- TOP WORD TAB CONTENT --- #}
+    {% elif active_tab == 'top_word' %}
+        <section id="top-word-content">
+            <h2>Top Weekly Word</h2>
+            <p>Shows the most frequently used word for the selected politician each week.</p>
+
+            <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
+                <input type="hidden" name="tab" value="top_word">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label for="politician_selector_top_word" class="form-label">Select Politician:</label>
+                    <select class="form-multiselect" id="politician_selector_top_word" name="politician_id_top_word" onchange="this.form.submit()">
+                        {% if top_word_data.all_politicians is not none and not top_word_data.all_politicians.empty %}
+                            {% for pol in top_word_data.all_politicians.to_dict(orient='records') %}
+                                <option value="{{ pol.politician_id }}" {% if pol.politician_id == top_word_data.selected_politician_id %}selected{% endif %}>
+                                    {{ pol.name }}
+                                </option>
+                            {% endfor %}
+                        {% else %}
+                            <option disabled>Politician list unavailable.</option>
+                        {% endif %}
+                    </select>
+                </div>
+                {# No explicit submit button needed if onchange submits #}
+            </form>
+
+            {% if top_word_data.selected_politician_name and top_word_data.selected_politician_name != "N/A" %}
+                <h3 style="margin-top: 1.5rem;">Top Weekly Word for {{ top_word_data.selected_politician_name }}</h3>
+            {% endif %}
+
+            {% if top_word_data.top_words_df is not none and not top_word_data.top_words_df.empty %}
+                <div class="table-scroll-wrapper">
+                    {{ top_word_data.top_words_df.to_html(classes='styled-table data-table', index=False, formatters={'Week Start Date': '{:%Y-%m-%d}'.format}) | safe }}
+                </div>
+            {% elif top_word_data.selected_politician_id %}
+                <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">No top word data found for {{ top_word_data.selected_politician_name or "the selected politician" }}.</div>
+            {% elif top_word_data.all_politicians is not none and not top_word_data.all_politicians.empty %}
+                <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">ℹ️ Select a politician above to view their top weekly words. Default is Donald Trump.</div>
+            {% else %}
+                <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">Politician data unavailable.</div>
+            {% endif %}
+        </section>
+
+    {# --- SIMILARITY TAB CONTENT --- #}
     {% elif active_tab == 'similarity' %}
+        {# ... (your existing similarity tab content) ... #}
         <section id="valence-similarity-content">
             <h2>Sentiment Similarity Matrix</h2>
             <p>Heatmap shows similarity based on sentiment profiles. Score closer to 1 indicates more similar profiles. Politicians are ordered by total submissions for "All Available".</p>
-
-        <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
+            <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
                 <input type="hidden" name="tab" value="similarity">
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label for="politician_multiselector_similarity" class="form-label">Select Politicians (Max {{ similarity_data.MAX_HEATMAP_POLITICIANS }} shown, ordered by total votes):</label>
                     <p><small><input type="checkbox" name="politician_select_mode_similarity" value="All" {% if 'All' in request.args.get('politician_select_mode_similarity', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available (Top {{similarity_data.MAX_HEATMAP_POLITICIANS}} by total votes)</small></p>
-                    
                     <select multiple class="form-multiselect" id="politician_multiselector_similarity" name="politician_ids_similarity" size="10">
                         {% if similarity_data.available_politicians %}
                             {% for pol in similarity_data.available_politicians %}
@@ -156,31 +202,24 @@
                 </div>
                 <button type="submit" class="button-primary">Generate Heatmap</button>
             </form>
-
             {% if similarity_data.heatmap_img_base64 %}
-                <div class="plot-container" style="text-align: center; margin: 1.5rem 0;">
-                    <img src="data:image/png;base64,{{ similarity_data.heatmap_img_base64 }}" alt="Valence Similarity Heatmap" style="max-width: 100%; height: auto;">
-                </div>
+                <div class="plot-container"><img src="data:image/png;base64,{{ similarity_data.heatmap_img_base64 }}" alt="Valence Similarity Heatmap" style="max-width: 100%; height: auto;"></div>
             {% elif (similarity_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.df_for_similarity_calc is not none and similarity_data.df_for_similarity_calc|length <= 1 %}
-                <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">Need at least two politicians for similarity analysis.</div>
+                <div class="info-message">Need at least two politicians for similarity analysis.</div>
             {% elif similarity_data.available_politicians %}
-                 <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">ℹ️ Select politician(s) above. Default selection is top 5 by total votes.</div>
+                 <div class="info-message">ℹ️ Select politician(s) above. Default selection is top 5 by total votes.</div>
             {% else %}
-                <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">No politicians available for similarity analysis.</div>
+                <div class="info-message">No politicians available for similarity analysis.</div>
             {% endif %}
-            
             {% if similarity_data.df_for_similarity_calc is not none and not similarity_data.df_for_similarity_calc.empty and similarity_data.df_for_similarity_calc|length >= similarity_data.MAX_HEATMAP_POLITICIANS and 'All' in request.args.get('politician_select_mode_similarity', '') %}
-                <div class="warning-message" style="background-color: #fff3cd; color: #856404; padding: 10px; border-radius: 5px;">Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} politicians by total votes.</div>
+                <div class="warning-message">Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} politicians by total votes.</div>
             {% elif similarity_data.selected_politician_ids and not ('All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.selected_politician_ids|length > similarity_data.MAX_HEATMAP_POLITICIANS %}
-                <div class="warning-message" style="background-color: #fff3cd; color: #856404; padding: 10px; border-radius: 5px;">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>
+                <div class="warning-message">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>
             {% endif %}
-
             <details class="data-expander">
                 <summary>View Similarity Matrix Data</summary>
                 {% if similarity_data.similarity_df_html %}
-                    <div class="table-scroll-wrapper">
-                        {{ similarity_data.similarity_df_html | safe }}
-                    </div>
+                    <div class="table-scroll-wrapper">{{ similarity_data.similarity_df_html | safe }}</div>
                 {% elif similarity_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_similarity', '') %}
                     <p class="text-muted">Not enough data or politicians to generate matrix from current selection.</p>
                 {% else %}
@@ -188,11 +227,13 @@
                 {% endif %}
             </details>
         </section>
+
+    {# --- DATASET TAB CONTENT --- #}
     {% elif active_tab == 'dataset' %}
+        {# ... (your existing dataset tab content) ... #}
         <section id="dataset-metrics-content">
             <h2>Dataset Overview</h2>
             <p>Basic statistics about the underlying dataset.</p>
-            
             {% if dataset_data and dataset_data.metrics %}
                 <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; margin-left: auto; margin-right: auto;">
                     <ul style="list-style-type: none; padding-left: 0;">
@@ -211,6 +252,12 @@
                         <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
                             <strong>Net Sentiment/Submission:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.average_sentiment_score_all_submissions }}</span>
                         </li>
+                         <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                            <strong>Overall Approval Rating:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.net_approval_rating_percent_all_submissions }}</span>
+                        </li>
+                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                            <strong>Submissions Used For Sentiment:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.votes_contributing_to_sentiment_metrics }}</span>
+                        </li>
                         <li style="font-size: 1.1em; padding: 8px; overflow: hidden;">
                             <strong>Data Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ dataset_data.metrics.votes_date_range }}</span>
                         </li>
@@ -222,11 +269,13 @@
                 <p class="text-muted">Could not retrieve dataset metrics at this time.</p>
             {% endif %}
         </section>
+
+    {# --- FEED TAB CONTENT --- #}
     {% elif active_tab == 'feed' %}
-        <section id="feed-content"> 
+        {# ... (your existing feed tab content) ... #}
+         <section id="feed-content"> 
             <h2>Latest Activity Feed</h2>
             <p>Shows the most recent votes recorded in the system.</p>
-
             {% if feed_data and feed_data.latest_feed_items %} 
                 <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 600px;"> 
                     <table class="styled-table data-table feed-table"> 
@@ -268,13 +317,11 @@ function updateSliderValue(sliderId, outputId) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Script for Tab 1 (Sentiment)
     const sentimentSlider = document.getElementById('min_votes_slider_sentiment'); 
     const sentimentOutput = document.getElementById('slider_value_sentiment');
     if (sentimentSlider && sentimentOutput) { 
         sentimentOutput.innerHTML = sentimentSlider.value;
     }
-    // No slider currently on Tab 2 (Approval)
 });
 </script>
 {% endblock %}

@@ -50,7 +50,11 @@ def get_engine():
     db_config["port"] = get_env_var(prefix, "port") or 5432
 
     try:
-        db_connection_str = f'postgresql+psycopg2://{db_config["username"]}:{db_config["password"]}@{db_config["host"]}:{db_config["port"]}/{db_config["database"]}?sslmode=require'
+        # Modified for Railway, remove ?sslmode=require for local if not needed
+        db_connection_str = f'postgresql+psycopg2://{db_config["username"]}:{db_config["password"]}@{db_config["host"]}:{db_config["port"]}/{db_config["database"]}'
+        if DEPLOY_ENV == 'PRODUCTION': # Typically, production DBs like on Railway might enforce SSL
+             db_connection_str += '?sslmode=require'
+
         engine = create_engine(db_connection_str)
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
@@ -89,22 +93,22 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
                 CASE WHEN w.sentiment_score > {approve_threshold} THEN 'Approve'
                      WHEN w.sentiment_score < {disapprove_threshold} THEN 'Disapprove'
                      ELSE 'Neutral' END AS sentiment_category
-            FROM votes AS v JOIN words AS w ON v.word_id = w.word_id -- No IS NOT NULL here, let all words contribute to total votes if needed
+            FROM votes AS v JOIN words AS w ON v.word_id = w.word_id 
         ), PoliticianSentimentCounts AS (
             SELECT politician_id, sentiment_category, COUNT(*) AS category_count
             FROM VoteSentimentCategories 
-            WHERE sentiment_category IN ('Approve', 'Disapprove', 'Neutral') -- Only count these for percentages
+            WHERE sentiment_category IN ('Approve', 'Disapprove', 'Neutral') 
             GROUP BY politician_id, sentiment_category
-        ), PoliticianTotalScorableVotes AS ( -- This counts votes linked to words that CAN be categorized (A,D,N based on score)
+        ), PoliticianTotalScorableVotes AS ( 
             SELECT v.politician_id, COUNT(v.vote_id) AS total_votes 
             FROM votes v JOIN words w ON v.word_id = w.word_id
-            WHERE w.sentiment_score IS NOT NULL -- Ensure only scorable votes contribute to this total for percentages
+            WHERE w.sentiment_score IS NOT NULL 
             GROUP BY v.politician_id
         ), PoliticianPercentages AS (
             SELECT 
                 p.politician_id, 
                 p.name AS politician_name, 
-                COALESCE(ptv.total_votes, 0) AS total_votes, -- Use total_votes from PoliticianTotalScorableVotes
+                COALESCE(ptv.total_votes, 0) AS total_votes, 
                 COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Approve' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS positive_percent,
                 COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Disapprove' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS negative_percent,
                 COALESCE(SUM(CASE WHEN psc.sentiment_category = 'Neutral' THEN psc.category_count ELSE 0 END) * 100.0 / NULLIF(ptv.total_votes, 0), 0) AS neutral_percent
@@ -137,12 +141,12 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
         app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}\nQuery was: {query_with_final_order_by}")
         return pd.DataFrame()
     
-def fetch_weekly_approval_rating(_engine, politician_ids_list):
+def fetch_weekly_approval_rating(_engine, politician_ids_list): # This is for Tab 2 (Normalized Sentiment)
     if not _engine or not politician_ids_list: return pd.DataFrame()
     try:
         safe_politician_ids = tuple(map(int, politician_ids_list))
     except ValueError:
-        app.logger.error(f"Invalid non-integer ID in politician_ids_list for trends: {politician_ids_list}")
+        app.logger.error(f"Invalid non-integer ID in politician_ids_list for weekly approval: {politician_ids_list}")
         return pd.DataFrame()
 
     if not safe_politician_ids: return pd.DataFrame()
@@ -169,11 +173,24 @@ def fetch_weekly_approval_rating(_engine, politician_ids_list):
     """)
     try:
         with _engine.connect() as connection: df = pd.read_sql(query, connection) 
-        if 'weekly_approval_rating_percent' in df.columns: df['weekly_approval_rating_percent'] = pd.to_numeric(df['weekly_approval_rating_percent'], errors='coerce') 
-        if 'week_start_date' in df.columns: df['week_start_date'] = pd.to_datetime(df['week_start_date'], errors='coerce')
+
+        if df.empty:
+            return pd.DataFrame(columns=['politician_name', 'politician_id', 'year_week', 'week_start_date', 'total_votes_in_week', 'weekly_approval_rating_percent'])
+
+        if 'weekly_approval_rating_percent' in df.columns: 
+            df['weekly_approval_rating_percent'] = pd.to_numeric(df['weekly_approval_rating_percent'], errors='coerce') # Keep NULLs for plotting gaps
+        if 'week_start_date' in df.columns: 
+            df['week_start_date'] = pd.to_datetime(df['week_start_date'], errors='coerce')
+        if 'total_votes_in_week' in df.columns:
+            df['total_votes_in_week'] = pd.to_numeric(df['total_votes_in_week'], errors='coerce').fillna(0).astype(int)
+        
+        expected_cols = ['politician_name', 'politician_id', 'year_week', 'week_start_date', 'total_votes_in_week', 'weekly_approval_rating_percent']
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = pd.NA
         return df
     except Exception as e: 
-        app.logger.error(f"Error in fetch_weekly_sentiment_trends_for_selected_politicians: {e}")
+        app.logger.error(f"Error in fetch_weekly_approval_rating: {e}\nQuery: {query}") # Changed function name in log
         return pd.DataFrame()
     
 def fetch_dataset_metrics(_engine):
@@ -182,68 +199,151 @@ def fetch_dataset_metrics(_engine):
         "net_sentiment_sum_all_submissions", "average_sentiment_score_all_submissions",
         "net_approval_rating_percent_all_submissions", "votes_contributing_to_sentiment_metrics"
     ]
-
-    if not _engine:
-        return {key: "N/A" for key in metric_keys}
-
+    if not _engine: return {key: "N/A" for key in metric_keys}
     metrics = {}
     try:
         with _engine.connect() as connection:
             metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or "N/A"
             metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or "N/A"
             metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or "N/A"
-            
             res_dates = connection.execute(text("SELECT MIN(created_at)::date AS min_date, MAX(created_at)::date AS max_date FROM votes;")).fetchone()
             if res_dates and res_dates.min_date and res_dates.max_date:
                 min_d, max_d = res_dates.min_date, res_dates.max_date
                 metrics["votes_date_range"] = f"{min_d.strftime('%Y-%m-%d')} to {max_d.strftime('%Y-%m-%d')}" if min_d != max_d else f"On {min_d.strftime('%Y-%m-%d')}"
-            else:
-                metrics["votes_date_range"] = "N/A"
-
-            # New metrics for overall sentiment of all submissions
+            else: metrics["votes_date_range"] = "N/A"
             sentiment_query = text("""
-                SELECT
-                    SUM(w.sentiment_score) AS total_sentiment_sum,
-                    COUNT(v.vote_id) AS scorable_votes_count
-                FROM
-                    votes v
-                JOIN
-                    words w ON v.word_id = w.word_id
-                WHERE
-                    w.sentiment_score IS NOT NULL;
-            """)
+                SELECT SUM(w.sentiment_score) AS total_sentiment_sum, COUNT(v.vote_id) AS scorable_votes_count
+                FROM votes v JOIN words w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL;""")
             sentiment_res = connection.execute(sentiment_query).fetchone()
-
             if sentiment_res and sentiment_res.scorable_votes_count is not None and sentiment_res.scorable_votes_count > 0:
-                total_sum = sentiment_res.total_sentiment_sum  # This will be numeric if scorable_votes_count > 0
-                count_votes = sentiment_res.scorable_votes_count
-
+                total_sum, count_votes = sentiment_res.total_sentiment_sum, sentiment_res.scorable_votes_count
                 metrics["net_sentiment_sum_all_submissions"] = f"{total_sum:.2f}"
                 metrics["votes_contributing_to_sentiment_metrics"] = count_votes
-
                 avg_score = total_sum / count_votes
-                metrics["average_sentiment_score_all_submissions"] = f"{avg_score:.4f}" # Raw average, e.g., -1.0 to 1.0
-
-                # Calculate overall approval rating % (0-100 scale)
-                # Assumes avg_score is typically in [-1, 1] range
+                metrics["average_sentiment_score_all_submissions"] = f"{avg_score:.4f}"
                 approval_percent = (((avg_score / 2.0) + 0.5) * 100.0)
                 metrics["net_approval_rating_percent_all_submissions"] = f"{approval_percent:.2f}%"
             else:
-                metrics["net_sentiment_sum_all_submissions"] = "N/A"
-                metrics["votes_contributing_to_sentiment_metrics"] = 0
-                metrics["average_sentiment_score_all_submissions"] = "N/A"
-                metrics["net_approval_rating_percent_all_submissions"] = "N/A"
-        
-        # Ensure all defined metric keys are present in the returned dictionary
+                for key in ["net_sentiment_sum_all_submissions", "votes_contributing_to_sentiment_metrics", 
+                            "average_sentiment_score_all_submissions", "net_approval_rating_percent_all_submissions"]:
+                    metrics[key] = "N/A" if key != "votes_contributing_to_sentiment_metrics" else 0
         for key in metric_keys:
-            if key not in metrics:
-                metrics[key] = "N/A"
+            if key not in metrics: metrics[key] = "N/A"
         return metrics
     except Exception as e:
         app.logger.error(f"Error fetching dataset metrics: {e}")
         return {key: "Error" for key in metric_keys}
 
-# --- Plotting Functions ---
+def fetch_feed_updates(_engine, limit=50):
+    if not _engine: return pd.DataFrame()
+    query = text(f"""
+        SELECT w.word AS "Word", p.name AS "Politician", v.created_at AS "Timestamp"
+        FROM votes v JOIN words w ON v.word_id = w.word_id JOIN politicians p ON v.politician_id = p.politician_id
+        ORDER BY v.created_at DESC LIMIT :limit_val;""")
+    try:
+        with _engine.connect() as connection: df = pd.read_sql(query, connection, params={'limit_val': limit})
+        if not df.empty:
+            if 'Timestamp' in df.columns: df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+            if 'Word' in df.columns: df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+        return df
+    except Exception as e:
+        app.logger.error(f"Error fetching feed updates: {e}\nQuery: {query}")
+        return pd.DataFrame()
+
+DEFAULT_TRUMP_ID = 1 # Define a default politician ID for the new tab
+
+def fetch_top_weekly_word_for_politician(_engine, politician_id):
+    if not _engine or politician_id is None:
+        return pd.DataFrame(columns=["Week (YYYY-IW)", "Week Start Date", "Top Word Used", "Votes for Top Word", "Total Votes This Week"])
+    
+    try:
+        pid = int(politician_id)
+    except ValueError:
+        app.logger.error(f"Invalid politician_id for top weekly word: {politician_id}")
+        return pd.DataFrame(columns=["Week (YYYY-IW)", "Week Start Date", "Top Word Used", "Votes for Top Word", "Total Votes This Week"])
+
+    query = text(f"""
+        WITH WeeklyWordCounts AS (
+            SELECT
+                v.politician_id,
+                w.word AS word_text, -- Assuming 'word' is the column name in your words table
+                DATE_TRUNC('week', v.created_at)::date AS week_start_date,
+                TO_CHAR(v.created_at, 'IYYY-IW') AS year_week,
+                COUNT(v.vote_id) AS word_vote_count
+            FROM
+                votes v
+            JOIN
+                words w ON v.word_id = w.word_id
+            WHERE
+                v.politician_id = :politician_id_param
+            GROUP BY
+                v.politician_id,
+                w.word,
+                week_start_date,
+                year_week
+        ),
+        RankedWeeklyWords AS (
+            SELECT
+                politician_id,
+                word_text,
+                week_start_date,
+                year_week,
+                word_vote_count,
+                ROW_NUMBER() OVER (PARTITION BY politician_id, week_start_date ORDER BY word_vote_count DESC, word_text ASC) as rn
+            FROM
+                WeeklyWordCounts
+        ),
+        TotalVotesPerWeek AS (
+            SELECT
+                politician_id,
+                DATE_TRUNC('week', v.created_at)::date AS week_start_date,
+                COUNT(v.vote_id) as total_weekly_votes
+            FROM
+                votes v
+            WHERE 
+                v.politician_id = :politician_id_param
+            GROUP BY
+                politician_id,
+                week_start_date
+        )
+        SELECT
+            rww.year_week AS "Week (YYYY-IW)",
+            rww.week_start_date AS "Week Start Date",
+            rww.word_text AS "Top Word Used",
+            rww.word_vote_count AS "Votes for Top Word",
+            COALESCE(tvpw.total_weekly_votes, 0) AS "Total Votes This Week"
+        FROM
+            RankedWeeklyWords rww
+        LEFT JOIN -- Use LEFT JOIN in case a week has words but no total votes (should not happen if data is consistent)
+            TotalVotesPerWeek tvpw ON rww.politician_id = tvpw.politician_id AND rww.week_start_date = tvpw.week_start_date
+        WHERE
+            rww.rn = 1 
+        ORDER BY
+            rww.week_start_date DESC;
+    """)
+    try:
+        with _engine.connect() as connection:
+            df = pd.read_sql(query, connection, params={'politician_id_param': pid})
+        
+        if df.empty:
+             return pd.DataFrame(columns=["Week (YYYY-IW)", "Week Start Date", "Top Word Used", "Votes for Top Word", "Total Votes This Week"])
+
+        if "Week Start Date" in df.columns:
+            df["Week Start Date"] = pd.to_datetime(df["Week Start Date"])
+        if "Top Word Used" in df.columns:
+            df["Top Word Used"] = df["Top Word Used"].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+        for col in ["Votes for Top Word", "Total Votes This Week"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+        
+        return df
+    except Exception as e:
+        app.logger.error(f"Error fetching top weekly word for politician_id {pid}: {e}\nQuery: {query}")
+        return pd.DataFrame(columns=["Week (YYYY-IW)", "Week Start Date", "Top Word Used", "Votes for Top Word", "Total Votes This Week"])
+
+
+# --- Plotting Functions (plot_stacked_horizontal_bar_to_image, plot_multiline_chart_to_image, plot_similarity_heatmap_to_image, get_image_as_base64)
+# These remain the same as in your provided code. I'll include them for completeness.
 def plot_stacked_horizontal_bar_to_image(df, categories, category_colors, title, xlabel, ylabel, top_n=20, decimal_places=1):
     if df.empty or not all(cat in df.columns for cat in categories): return None
     data_to_plot = df.head(top_n).copy();
@@ -275,7 +375,7 @@ def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, yl
     unique_groups = df[group_col].nunique(); fig_height = max(6, min(12, 5 + unique_groups * 0.3)); fig_width = 14
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     if unique_groups <= 10: colors = sns.color_palette("tab10", n_colors=unique_groups)
-    else: colors = sns.color_palette(color_palette, n_colors=unique_groups)
+    else: colors = sns.color_palette(color_palette, n_colors=unique_groups) # Use the passed color_palette
     sns.lineplot(data=df, x=x_col, y=y_col, hue=group_col, marker='o', ax=ax, linewidth=2, palette=colors)
     ax.set_title(title, fontsize=16, pad=15, weight='bold'); ax.set_xlabel(xlabel, fontsize=13); ax.set_ylabel(ylabel, fontsize=13)
     plt.xticks(rotation=30, ha='right', fontsize=10); plt.yticks(fontsize=10)
@@ -323,57 +423,25 @@ def get_image_as_base64(img_buf):
         return base64.b64encode(img_buf.read()).decode('utf-8')
     return None
 
-def fetch_feed_updates(_engine, limit=50):
-    if not _engine: return pd.DataFrame()
-    query = text(f"""
-        SELECT
-            w.word AS "Word",
-            p.name AS "Politician",
-            v.created_at AS "Timestamp"
-        FROM
-            votes v
-        JOIN
-            words w ON v.word_id = w.word_id
-        JOIN
-            politicians p ON v.politician_id = p.politician_id
-        ORDER BY
-            v.created_at DESC
-        LIMIT :limit_val;
-    """)
-    try:
-        with _engine.connect() as connection:
-            df = pd.read_sql(query, connection, params={'limit_val': limit})
-        
-        if not df.empty:
-            if 'Timestamp' in df.columns:
-                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-            
-            if 'Word' in df.columns:
-                df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
-        return df
-    except Exception as e:
-        app.logger.error(f"Error fetching feed updates: {e}\nQuery: {query}")
-        return pd.DataFrame()
-    
-
 # --- Main Dashboard Route ---
 @app.route('/')
 def dashboard():
     if not engine:
         return render_template('error.html', message="CRITICAL: Database connection failed. Dashboard cannot operate.")
 
-    active_tab = request.args.get('tab', 'sentiment') # Default to 'sentiment' as the first tab
+    active_tab = request.args.get('tab', 'sentiment') 
     
     politicians_list_df = fetch_politicians_list(engine)
     
-    sentiment_tab_data = {} # For Tab 1: Sentiment Distribution
-    approval_tab_data = {}  # For Tab 2: Weekly Approval Rating (formerly Trends)
+    sentiment_tab_data = {} 
+    approval_tab_data = {}  
     similarity_data_dict = {}
     dataset_data_dict = {}
     feed_data_dict = {} 
+    top_word_tab_data = {} # For the new "Top Word" tab
 
     if active_tab == 'sentiment':
-        min_votes_param = request.args.get('min_votes_sentiment', '20') # Unique query param
+        min_votes_param = request.args.get('min_votes_sentiment', '20') 
         min_votes = int(min_votes_param) if min_votes_param.isdigit() else 20
         df_sentiment_dist = fetch_sentiment_distribution_per_politician(
             engine, min_total_votes_threshold=min_votes, sort_by_total_votes=False
@@ -399,12 +467,14 @@ def dashboard():
         selected_politician_ids_str = request.args.getlist('politician_ids_approval') 
         selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
 
-        if not selected_politician_ids_str and not politicians_list_df.empty: # Default selection
-            trump_row = politicians_list_df[politicians_list_df['name'].str.contains("Donald Trump", case=False, na=False)]
-            if not trump_row.empty:
-                selected_politician_ids = [int(trump_row['politician_id'].iloc[0])]
+        if not selected_politician_ids_str and not politicians_list_df.empty: 
+            # Default to Trump if his ID is found, otherwise first politician
+            # Check if DEFAULT_TRUMP_ID exists in the fetched list
+            if DEFAULT_TRUMP_ID in politicians_list_df['politician_id'].values:
+                 selected_politician_ids = [DEFAULT_TRUMP_ID]
             elif not politicians_list_df.empty:
                 selected_politician_ids = [int(politicians_list_df['politician_id'].iloc[0])]
+            # If politicians_list_df is empty, selected_politician_ids will remain empty
         
         if "All" in request.args.get('politician_select_mode_approval', '') and not politicians_list_df.empty: 
             selected_politician_ids_for_query = politicians_list_df['politician_id'].tolist()
@@ -417,12 +487,13 @@ def dashboard():
 
         if selected_politician_ids_for_query and not politicians_list_df.empty:
             selected_politician_names = politicians_list_df[politicians_list_df['politician_id'].isin(selected_politician_ids_for_query)]['name'].tolist()
+            # Using the original normalized sentiment function as per your app.py
             weekly_df_multiple = fetch_weekly_approval_rating(engine, selected_politician_ids_for_query) 
             
             if not weekly_df_multiple.empty and 'weekly_approval_rating_percent' in weekly_df_multiple.columns and weekly_df_multiple['weekly_approval_rating_percent'].notna().any():
                 weekly_approval_img_buf = plot_multiline_chart_to_image( 
                     weekly_df_multiple, x_col='week_start_date', y_col='weekly_approval_rating_percent',
-                    group_col='politician_name', title='Weekly Approval Rating', xlabel='Week Start Date', ylabel='Approval Rating (%)'
+                    group_col='politician_name', title='Weekly Approval Rating (Normalized Sentiment)', xlabel='Week Start Date', ylabel='Normalized Sentiment (0-100%)'
                 )
                 weekly_approval_img_base64 = get_image_as_base64(weekly_approval_img_buf)
         
@@ -433,9 +504,9 @@ def dashboard():
             if actual_cols: df_display_ready = weekly_df_multiple[actual_cols].copy()
         
         approval_tab_data = { 
-            'all_politicians': politicians_list_df, # For the dropdown
-            'selected_politician_ids': selected_politician_ids, # For pre-selecting in dropdown
-            'selected_politician_names': selected_politician_names, # For display in title
+            'all_politicians': politicians_list_df, 
+            'selected_politician_ids': selected_politician_ids, 
+            'selected_politician_names': selected_politician_names, 
             'df_display_ready': df_display_ready, 
             'weekly_approval_img_base64': weekly_approval_img_base64
         }
@@ -471,6 +542,7 @@ def dashboard():
             
             if not df_for_similarity_calc.empty and len(df_for_similarity_calc) > 1:
                 names = df_for_similarity_calc['politician_name'].tolist()
+                # Ensure correct column names are used for vector calculation
                 vectors = df_for_similarity_calc[['positive_percent', 'neutral_percent', 'negative_percent']].values
                 if vectors.ndim == 2 and vectors.shape[0] > 1:
                     sim_matrix = cosine_similarity(vectors)
@@ -505,6 +577,43 @@ def dashboard():
         feed_data_dict = {
             'latest_feed_items': feed_list_for_template 
         }
+    elif active_tab == 'top_word': # New Tab Logic
+        selected_pid_top_word_str = request.args.get('politician_id_top_word')
+        
+        # Default to Trump if no selection or if selected ID is invalid/not found
+        selected_pid_top_word = None
+        if selected_pid_top_word_str and selected_pid_top_word_str.isdigit():
+            # Check if the selected ID is valid from the fetched list
+            if not politicians_list_df.empty and int(selected_pid_top_word_str) in politicians_list_df['politician_id'].values:
+                selected_pid_top_word = int(selected_pid_top_word_str)
+            else: # Invalid ID selected, try to default
+                app.logger.warning(f"Invalid politician_id_top_word received: {selected_pid_top_word_str}. Defaulting.")
+        
+        if selected_pid_top_word is None: # If still None (no selection or invalid)
+            if not politicians_list_df.empty and DEFAULT_TRUMP_ID in politicians_list_df['politician_id'].values:
+                selected_pid_top_word = DEFAULT_TRUMP_ID
+            elif not politicians_list_df.empty: # Fallback to first politician if Trump not found
+                selected_pid_top_word = int(politicians_list_df['politician_id'].iloc[0])
+            # If politicians_list_df is empty, selected_pid_top_word will remain None, and fetch function handles it
+
+        top_words_df = pd.DataFrame()
+        selected_politician_name_top_word = "N/A"
+
+        if selected_pid_top_word is not None:
+            top_words_df = fetch_top_weekly_word_for_politician(engine, selected_pid_top_word)
+            # Get the name of the selected politician
+            if not politicians_list_df.empty:
+                name_row = politicians_list_df[politicians_list_df['politician_id'] == selected_pid_top_word]
+                if not name_row.empty:
+                    selected_politician_name_top_word = name_row['name'].iloc[0]
+        
+        top_word_tab_data = {
+            'all_politicians': politicians_list_df,
+            'selected_politician_id': selected_pid_top_word,
+            'selected_politician_name': selected_politician_name_top_word,
+            'top_words_df': top_words_df
+        }
+
 
     return render_template('index.html',
                            active_tab=active_tab,
@@ -513,6 +622,7 @@ def dashboard():
                            similarity_data=similarity_data_dict,
                            dataset_data=dataset_data_dict,
                            feed_data=feed_data_dict, 
+                           top_word_data=top_word_tab_data, # Pass new data
                            engine_available=bool(engine)
                            )
 
@@ -533,6 +643,6 @@ if __name__ == '__main__':
         debug_mode = True
         app.logger.info("Forcing debug mode ON for local 'python3 app.py' execution as FLASK_ENV was not 'development'.")
     
-    port_num = int(os.environ.get('PORT', 5001))
+    port_num = int(os.environ.get('PORT', 5001)) # Default was 5000, ensure this is intended
     app.logger.info(f"Attempting to run app with debug_mode: {debug_mode} on port {port_num}")
     app.run(debug=debug_mode, host='0.0.0.0', port=port_num)
