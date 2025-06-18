@@ -8,7 +8,7 @@
            class="tab-link {% if active_tab == 'sentiment' %}active{% endif %}">Sentiment</a>
         <a href="{{ url_for('dashboard', tab='approval') }}"
            class="tab-link {% if active_tab == 'approval' %}active{% endif %}">Approval</a>
-        <a href="{{ url_for('dashboard', tab='top_word') }}"  {# NEW TAB LINK #}
+        <a href="{{ url_for('dashboard', tab='top_word') }}"
            class="tab-link {% if active_tab == 'top_word' %}active{% endif %}">Top Word</a>
         <a href="{{ url_for('dashboard', tab='similarity') }}" 
            class="tab-link {% if active_tab == 'similarity' %}active{% endif %}">Similarity</a>
@@ -156,16 +156,36 @@
                         {% endif %}
                     </select>
                 </div>
-                {# No explicit submit button needed if onchange submits #}
             </form>
 
             {% if top_word_data.selected_politician_name and top_word_data.selected_politician_name != "N/A" %}
                 <h3 style="margin-top: 1.5rem;">Top Weekly Word for {{ top_word_data.selected_politician_name }}</h3>
             {% endif %}
 
-            {% if top_word_data.top_words_df is not none and not top_word_data.top_words_df.empty %}
-                <div class="table-scroll-wrapper">
-                    {{ top_word_data.top_words_df.to_html(classes='styled-table data-table', index=False, formatters={'Week Start Date': '{:%Y-%m-%d}'.format}) | safe }}
+            {% if top_word_data.top_words_list %}
+                <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 600px;"> 
+                    <table class="styled-table data-table feed-table">
+                        <thead>
+                            <tr>
+                                <th>Week (YYYY-IW)</th>
+                                <th style="white-space: nowrap;">Week Start Date</th>
+                                <th>Top Word Used</th>
+                                <th style="text-align: right;">Votes for Top Word</th>
+                                <th style="text-align: right;">Total Votes This Week</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in top_word_data.top_words_list %} 
+                            <tr>
+                                <td>{{ row['Week (YYYY-IW)'] }}</td>
+                                <td style="white-space: nowrap;">{{ row['Week Start Date'] }}</td>
+                                <td>{{ row['Top Word Used'] }}</td>
+                                <td style="text-align: right;">{{ row['Votes for Top Word'] }}</td>
+                                <td style="text-align: right;">{{ row['Total Votes This Week'] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             {% elif top_word_data.selected_politician_id %}
                 <div class="info-message" style="background-color: #eef; padding: 10px; border-radius: 5px;">No top word data found for {{ top_word_data.selected_politician_name or "the selected politician" }}.</div>
@@ -178,7 +198,6 @@
 
     {# --- SIMILARITY TAB CONTENT --- #}
     {% elif active_tab == 'similarity' %}
-        {# ... (your existing similarity tab content) ... #}
         <section id="valence-similarity-content">
             <h2>Sentiment Similarity Matrix</h2>
             <p>Heatmap shows similarity based on sentiment profiles. Score closer to 1 indicates more similar profiles. Politicians are ordered by total submissions for "All Available".</p>
@@ -230,7 +249,6 @@
 
     {# --- DATASET TAB CONTENT --- #}
     {% elif active_tab == 'dataset' %}
-        {# ... (your existing dataset tab content) ... #}
         <section id="dataset-metrics-content">
             <h2>Dataset Overview</h2>
             <p>Basic statistics about the underlying dataset.</p>
@@ -272,26 +290,27 @@
 
     {# --- FEED TAB CONTENT --- #}
     {% elif active_tab == 'feed' %}
-        {# ... (your existing feed tab content) ... #}
          <section id="feed-content"> 
             <h2>Latest Activity Feed</h2>
-            <p>Shows the most recent votes recorded in the system.</p>
+            <p>Shows the most recent votes recorded in the system, along with the sentiment score of the word used.</p>
             {% if feed_data and feed_data.latest_feed_items %} 
                 <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 600px;"> 
                     <table class="styled-table data-table feed-table"> 
                         <thead>
                             <tr>
-                                <th>Word</th>
-                                <th>Politician</th>
-                                <th style="white-space: nowrap;">Timestamp</th>
+                                <th style="white-space: nowrap;">Timestamp</th> 
+                                <th>Politician</th>                         
+                                <th>Word</th>                               
+                                <th style="text-align: right;">Sentiment</th>     
                             </tr>
                         </thead>
                         <tbody>
                             {% for item in feed_data.latest_feed_items %} 
                             <tr>
-                                <td>{{ item['Word'] }}</td>
-                                <td>{{ item['Politician'] }}</td>
                                 <td style="white-space: nowrap;">{{ item['Timestamp'] }}</td>
+                                <td>{{ item['Politician'] }}</td>
+                                <td>{{ item['Word'] }}</td>
+                                <td style="text-align: right;">{{ item['Sentiment'] }}</td> 
                             </tr>
                             {% endfor %}
                         </tbody>

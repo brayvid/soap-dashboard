@@ -236,19 +236,51 @@ def fetch_dataset_metrics(_engine):
 
 def fetch_feed_updates(_engine, limit=50):
     if not _engine: return pd.DataFrame()
+    # Changed alias from "Valence" to "Sentiment"
     query = text(f"""
-        SELECT w.word AS "Word", p.name AS "Politician", v.created_at AS "Timestamp"
-        FROM votes v JOIN words w ON v.word_id = w.word_id JOIN politicians p ON v.politician_id = p.politician_id
-        ORDER BY v.created_at DESC LIMIT :limit_val;""")
+        SELECT 
+            v.created_at AS "Timestamp",
+            p.name AS "Politician",
+            w.word AS "Word",
+            w.sentiment_score AS "Sentiment" 
+        FROM 
+            votes v
+        JOIN 
+            words w ON v.word_id = w.word_id
+        JOIN 
+            politicians p ON v.politician_id = p.politician_id
+        ORDER BY 
+            v.created_at DESC
+        LIMIT :limit_val;
+    """)
     try:
-        with _engine.connect() as connection: df = pd.read_sql(query, connection, params={'limit_val': limit})
+        with _engine.connect() as connection: 
+            df = pd.read_sql(query, connection, params={'limit_val': limit})
+        
+        expected_cols = ["Timestamp", "Politician", "Word", "Sentiment"] # Updated expected_cols
+
         if not df.empty:
-            if 'Timestamp' in df.columns: df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-            if 'Word' in df.columns: df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+            if 'Timestamp' in df.columns:
+                df['Timestamp'] = pd.to_datetime(df['Timestamp']) 
+            
+            if 'Word' in df.columns:
+                df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+            
+            if 'Sentiment' in df.columns: # Check for the new column name
+                df['Sentiment'] = pd.to_numeric(df['Sentiment'], errors='coerce')
+
+            # Ensure specific column order and existence
+            for col in expected_cols:
+                if col not in df.columns:
+                    df[col] = pd.NA 
+            df = df[expected_cols] 
+        else: 
+            df = pd.DataFrame(columns=expected_cols)
+
         return df
     except Exception as e:
         app.logger.error(f"Error fetching feed updates: {e}\nQuery: {query}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=expected_cols) # Use updated expected_cols
 
 DEFAULT_TRUMP_ID = 1 # Define a default politician ID for the new tab
 
@@ -570,48 +602,61 @@ def dashboard():
         if not feed_df.empty:
             feed_list_for_template = feed_df.to_dict(orient='records')
             for item in feed_list_for_template:
-                if isinstance(item.get('Timestamp'), pd.Timestamp):
+                if 'Timestamp' in item and hasattr(item['Timestamp'], 'strftime'):
                     item['Timestamp'] = item['Timestamp'].strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(item.get('Timestamp'), datetime.datetime):
-                    item['Timestamp'] = item['Timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Format Sentiment here
+                if 'Sentiment' in item and pd.notna(item['Sentiment']): # Check for new column name
+                    try:
+                        item['Sentiment'] = f"{float(item['Sentiment']):.2f}" 
+                    except (ValueError, TypeError):
+                        item['Sentiment'] = "N/A" 
+                elif 'Sentiment' in item and pd.isna(item['Sentiment']): 
+                     item['Sentiment'] = "N/A" # Explicitly handle if it was NaN/None after coerce
+
         feed_data_dict = {
             'latest_feed_items': feed_list_for_template 
         }
     elif active_tab == 'top_word': # New Tab Logic
         selected_pid_top_word_str = request.args.get('politician_id_top_word')
         
-        # Default to Trump if no selection or if selected ID is invalid/not found
         selected_pid_top_word = None
         if selected_pid_top_word_str and selected_pid_top_word_str.isdigit():
-            # Check if the selected ID is valid from the fetched list
             if not politicians_list_df.empty and int(selected_pid_top_word_str) in politicians_list_df['politician_id'].values:
                 selected_pid_top_word = int(selected_pid_top_word_str)
-            else: # Invalid ID selected, try to default
+            else: 
                 app.logger.warning(f"Invalid politician_id_top_word received: {selected_pid_top_word_str}. Defaulting.")
         
-        if selected_pid_top_word is None: # If still None (no selection or invalid)
+        if selected_pid_top_word is None: 
             if not politicians_list_df.empty and DEFAULT_TRUMP_ID in politicians_list_df['politician_id'].values:
                 selected_pid_top_word = DEFAULT_TRUMP_ID
-            elif not politicians_list_df.empty: # Fallback to first politician if Trump not found
+            elif not politicians_list_df.empty: 
                 selected_pid_top_word = int(politicians_list_df['politician_id'].iloc[0])
-            # If politicians_list_df is empty, selected_pid_top_word will remain None, and fetch function handles it
 
-        top_words_df = pd.DataFrame()
+        top_words_df = pd.DataFrame() # Initialize as empty DataFrame
         selected_politician_name_top_word = "N/A"
 
         if selected_pid_top_word is not None:
             top_words_df = fetch_top_weekly_word_for_politician(engine, selected_pid_top_word)
-            # Get the name of the selected politician
             if not politicians_list_df.empty:
                 name_row = politicians_list_df[politicians_list_df['politician_id'] == selected_pid_top_word]
                 if not name_row.empty:
                     selected_politician_name_top_word = name_row['name'].iloc[0]
         
+        # Convert DataFrame to list of dicts for easier template iteration AND FORMAT DATES
+        top_words_list_for_template = []
+        if not top_words_df.empty:
+            top_words_list_for_template = top_words_df.to_dict(orient='records')
+            for item in top_words_list_for_template:
+                # Ensure 'Week Start Date' exists and is a datetime-like object before formatting
+                if 'Week Start Date' in item and hasattr(item['Week Start Date'], 'strftime'):
+                    item['Week Start Date'] = item['Week Start Date'].strftime('%Y-%m-%d')
+        
         top_word_tab_data = {
             'all_politicians': politicians_list_df,
             'selected_politician_id': selected_pid_top_word,
             'selected_politician_name': selected_politician_name_top_word,
-            'top_words_df': top_words_df
+            'top_words_list': top_words_list_for_template # CHANGED from top_words_df to top_words_list
         }
 
 
