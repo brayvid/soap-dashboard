@@ -136,5 +136,12 @@ This application is designed to be easily deployable on platforms like [Railway.
 web: gunicorn app:app --log-file=-
 ```
 
+
+---
+
+
+![](images/example1.png)
+![](images/example2.png)
+
 ---
 <p align="center">&copy; Copyright 2024-2025 <a href="mailto:info@soap.fyi">soap.fyi</a>. All rights reserved.</p>
