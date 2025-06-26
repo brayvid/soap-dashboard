@@ -2,249 +2,261 @@
 {% extends "base.html" %}
 
 {% block content %}
-    
+
     <nav class="dashboard-tabs" style="margin-bottom: 20px; text-align: center;">
-        <a href="{{ url_for('dashboard', tab='sentiment') }}" 
+        <a href="{{ url_for('dashboard', tab='sentiment') }}"
            class="tab-link {% if active_tab == 'sentiment' %}active{% endif %}">Sentiment</a>
         <a href="{{ url_for('dashboard', tab='approval') }}"
            class="tab-link {% if active_tab == 'approval' %}active{% endif %}">Approval</a>
         <a href="{{ url_for('dashboard', tab='top_word') }}"
            class="tab-link {% if active_tab == 'top_word' %}active{% endif %}">Top Word</a>
-        <a href="{{ url_for('dashboard', tab='similarity') }}" 
+        <a href="{{ url_for('dashboard', tab='similarity') }}"
            class="tab-link {% if active_tab == 'similarity' %}active{% endif %}">Similarity</a>
-        <a href="{{ url_for('dashboard', tab='overview') }}" {# RENAMED href #}
-           class="tab-link {% if active_tab == 'overview' %}active{% endif %}">Overview</a> {# RENAMED Display Text #}
+        <a href="{{ url_for('dashboard', tab='overview') }}"
+           class="tab-link {% if active_tab == 'overview' %}active{% endif %}">Overview</a>
         <a href="{{ url_for('dashboard', tab='feed') }}"
            class="tab-link {% if active_tab == 'feed' %}active{% endif %}">Feed</a>
     </nav>
     <hr style="margin-bottom: 20px;">
 
     {# --- SENTIMENT TAB CONTENT --- #}
-    {% if active_tab == 'sentiment' %} 
-        {# ... (sentiment tab content as before) ... #}
-        <section id="sentiment-ratings-content">
-            <h2>Sentiment Distribution</h2>
-            <p>Shows 'Positive', 'Negative', 'Neutral' word sentiment.</p>
-            <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
-                <input type="hidden" name="tab" value="sentiment">
-                <div class="slider-container form-group" style="margin-bottom: 1rem;">
-                    <div>
-                        <label for="min_votes_slider_sentiment" class="form-label" style="margin-right: 5px; display: inline;">Minimum submissions:</label>
-                        <span id="slider_value_sentiment" class="slider-current-value" style="font-weight: bold;">{{ sentiment_data.min_votes_current }}</span>
+    {% if active_tab == 'sentiment' %}
+        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+            <section id="sentiment-ratings-content">
+                <h2>Sentiment Distribution</h2>
+                <p>Shows 'Positive', 'Negative', 'Neutral' word sentiment.</p>
+
+                {# Form directly in tab-content-container, or use .controls-container if you want a distinct box #}
+                <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
+                    <input type="hidden" name="tab" value="sentiment">
+                    <div class="slider-container form-group" style="margin-bottom: 1rem;">
+                        <div>
+                            <label for="min_votes_slider_sentiment" class="form-label" style="margin-right: 5px; display: inline;">Minimum submissions:</label>
+                            <span id="slider_value_sentiment" class="slider-current-value" style="font-weight: bold;">{{ sentiment_data.min_votes_current }}</span>
+                        </div>
+                        <input type="range" class="form-range-slider" id="min_votes_slider_sentiment" name="min_votes_sentiment"
+                            min="1" max="100" value="{{ sentiment_data.min_votes_current }}" step="1"
+                            oninput="updateSliderValue('min_votes_slider_sentiment', 'slider_value_sentiment')"
+                            onchange="this.form.submit()">
                     </div>
-                    <input type="range" class="form-range-slider" id="min_votes_slider_sentiment" name="min_votes_sentiment" 
-                        min="1" max="100" value="{{ sentiment_data.min_votes_current }}" step="1" 
-                        oninput="updateSliderValue('min_votes_slider_sentiment', 'slider_value_sentiment')"
-                        onchange="this.form.submit()">
-                </div>
-            </form>
-            {% if sentiment_data.dist_img_base64 %}
-                <div class="plot-container"><img src="data:image/png;base64,{{ sentiment_data.dist_img_base64 }}" alt="Sentiment Distribution Chart" style="max-width: 100%; height: auto;"></div>
-            {% elif sentiment_data.min_votes_current %}
-                <div class="info-message">No politicians meet threshold of {{ sentiment_data.min_votes_current }} scorable votes.</div>
-            {% else %}
-                 <div class="info-message">Adjust the slider to view data.</div>
-            {% endif %}
-            <details class="data-expander">
-                <summary>View Sentiment Distribution Data</summary>
-                {% if sentiment_data.df_sentiment_dist is not none and not sentiment_data.df_sentiment_dist.empty %}
-                    <div class="table-scroll-wrapper">
-                        {{ sentiment_data.df_sentiment_dist[['politician_name', 'positive_percent', 'neutral_percent', 'negative_percent', 'total_votes']].to_html(classes='styled-table data-table', index=False, formatters={'positive_percent': '{:.1f}%'.format, 'neutral_percent': '{:.1f}%'.format, 'negative_percent': '{:.1f}%'.format}) | safe }}
-                    </div>
-                {% else %}<p class="text-muted">No data to display.</p>{% endif %}
-            </details>
-        </section>
+                </form>
+
+                {% if sentiment_data.dist_img_base64 %}
+                    <div class="plot-container"><img src="data:image/png;base64,{{ sentiment_data.dist_img_base64 }}" alt="Sentiment Distribution Chart" style="max-width: 100%; height: auto;"></div>
+                {% elif sentiment_data.min_votes_current %}
+                    <div class="info-message">No politicians meet threshold of {{ sentiment_data.min_votes_current }} scorable votes.</div>
+                {% else %}
+                     <div class="info-message">Adjust the slider to view data.</div>
+                {% endif %}
+                <details class="data-expander">
+                    <summary>View Sentiment Distribution Data</summary>
+                    {% if sentiment_data.df_sentiment_dist is not none and not sentiment_data.df_sentiment_dist.empty %}
+                        <div class="table-scroll-wrapper">
+                            {{ sentiment_data.df_sentiment_dist[['politician_name', 'positive_percent', 'neutral_percent', 'negative_percent', 'total_votes']].to_html(classes='styled-table data-table', index=False, formatters={'positive_percent': '{:.1f}%'.format, 'neutral_percent': '{:.1f}%'.format, 'negative_percent': '{:.1f}%'.format}) | safe }}
+                        </div>
+                    {% else %}<p class="text-muted">No data to display.</p>{% endif %}
+                </details>
+            </section>
+        </div> {# END .tab-content-container #}
     {# --- APPROVAL TAB CONTENT --- #}
     {% elif active_tab == 'approval' %}
-        {# ... (approval tab content as before) ... #}
-        <section id="weekly-approval-content"> 
-            <h2>Weekly Approval Rating</h2>
-            <details class="data-expander" style="margin-bottom: 1.5rem; background-color: #f9f9f9; padding: 10px 15px; border-radius: 5px; border: 1px solid #eee;">
-                <summary style="font-weight: normal; color: #333; cursor: pointer;">How is Weekly Approval Rating calculated?</summary>
-                <div style="padding-top: 10px; font-size: 0.9em; line-height: 1.5;">
-                    <p>The Weekly Approval Rating (%) converts the average sentiment score of submissions for a politician in a given week (typically ranging from -1 for very negative to +1 for very positive) into a 0-100% scale.</p>
-                    <p style="margin-top: 8px;"><strong>Formula:</strong></p>
-                    <pre style="margin-top:5px; padding:8px; background-color:#eef5f9; border:1px solid #cce0f1; border-radius:4px; overflow-x:auto; text-align:left;"><code style="font-family: monospace; font-size: 0.95em;">Approval (%) = [ (AvgSentiment / 2) + 0.5 ] * 100</code></pre>
-                    <p style="margin-top: 8px;">Where:</p>
-                    <ul style="list-style-type: none; padding-left: 10px; margin-top: 5px;"><li><code>AvgSentiment</code> = (Sum of sentiment scores of all submissions in the week) / (Total number of submissions in the week).</li></ul>
-                    <p style="margin-top: 8px; font-size:0.9em"><em>This maps an average sentiment of -1 to 0%, 0 to 50%, and +1 to 100% approval.</em></p>
-                </div>
-            </details>
-            <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
-                <input type="hidden" name="tab" value="approval">
-                <div class="form-group" style="margin-bottom: 1rem;">
-                    <label for="politician_multiselector_approval" class="form-label">Select Politicians:</label>
-                    <p><small><input type="checkbox" name="politician_select_mode_approval" value="All" {% if 'All' in request.args.get('politician_select_mode_approval', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available</small></p>
-                    <select multiple class="form-multiselect" id="politician_multiselector_approval" name="politician_ids_approval" size="8">
-                        {% if approval_data.all_politicians is not none and not approval_data.all_politicians.empty %}
-                            {% for pol in approval_data.all_politicians.to_dict(orient='records') %}<option value="{{ pol.politician_id }}" {% if pol.politician_id in approval_data.selected_politician_ids %}selected{% endif %}>{{ pol.name }}</option>{% endfor %}
-                        {% else %}<option disabled>Politician list unavailable.</option>{% endif %}
-                    </select>
-                    <small class="form-text-hint">Hold Ctrl/Cmd to select multiple.</small>
-                </div>
-                <button type="submit" class="button-primary">Update Approval Chart</button>
-            </form>
-            {% if approval_data.selected_politician_names %}
-                <h3 style="margin-top: 1.5rem;">
-                {% if approval_data.selected_politician_names|length == 1 %}Approval Trend for: {{ approval_data.selected_politician_names[0] }}
-                {% elif approval_data.selected_politician_names|length > 1 %}Approval Trend Comparison for {{ approval_data.selected_politician_names|length }} politicians
-                {% endif %}</h3>
-            {% endif %}
-            {% if approval_data.weekly_approval_img_base64 %}
-                <div class="plot-container"><img src="data:image/png;base64,{{ approval_data.weekly_approval_img_base64 }}" alt="Weekly Approval Chart" style="max-width: 100%; height: auto;"></div>
-            {% elif approval_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_approval', '') %}
-                <div class="info-message">No weekly approval rating data for the selected politician(s).</div>
-            {% elif approval_data.all_politicians is not none and not approval_data.all_politicians.empty %}
-                <div class="info-message">ℹ️ Select politician(s) above. Default is Donald Trump if available.</div>
-            {% else %}<div class="info-message">Waiting for data...</div>{% endif %}
-            <details class="data-expander">
-                <summary>View Weekly Approval Data</summary>
-                {% if approval_data.df_display_ready is not none and not approval_data.df_display_ready.empty %}
-                    <div class="table-scroll-wrapper">{{ approval_data.df_display_ready.to_html(classes='styled-table data-table', index=False, formatters={'weekly_approval_rating_percent': '{:.0f}%'.format, 'week_start_date': '{:%Y-%m-%d}'.format}) | safe }}</div>
-                {% else %}<p class="text-muted">No data to display.</p>{% endif %}
-            </details>
-        </section>
+        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+            <section id="weekly-approval-content">
+                <h2>Weekly Approval Rating</h2>
+                <details class="data-expander" style="margin-bottom: 1.5rem; background-color: #f9f9f9; padding: 10px 15px; border-radius: 5px; border: 1px solid #eee;">
+                    <summary style="font-weight: normal; color: #333; cursor: pointer;">How is Weekly Approval Rating calculated?</summary>
+                    <div style="padding-top: 10px; font-size: 0.9em; line-height: 1.5;">
+                        <p>The Weekly Approval Rating (%) converts the average sentiment score of submissions for a politician in a given week (typically ranging from -1 for very negative to +1 for very positive) into a 0-100% scale.</p>
+                        <p style="margin-top: 8px;"><strong>Formula:</strong></p>
+                        <pre style="margin-top:5px; padding:8px; background-color:#eef5f9; border:1px solid #cce0f1; border-radius:4px; overflow-x:auto; text-align:left;"><code style="font-family: monospace; font-size: 0.95em;">Approval (%) = [ (AvgSentiment / 2) + 0.5 ] * 100</code></pre>
+                        <p style="margin-top: 8px;">Where:</p>
+                        <ul style="list-style-type: none; padding-left: 10px; margin-top: 5px;"><li><code>AvgSentiment</code> = (Sum of sentiment scores of all submissions in the week) / (Total number of submissions in the week).</li></ul>
+                        <p style="margin-top: 8px; font-size:0.9em"><em>This maps an average sentiment of -1 to 0%, 0 to 50%, and +1 to 100% approval.</em></p>
+                    </div>
+                </details>
+
+                {# Form directly in tab-content-container #}
+                <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
+                    <input type="hidden" name="tab" value="approval">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="politician_multiselector_approval" class="form-label">Select Politicians:</label>
+                        <p><small><input type="checkbox" name="politician_select_mode_approval" value="All" {% if 'All' in request.args.get('politician_select_mode_approval', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available</small></p>
+                        <select multiple class="form-multiselect" id="politician_multiselector_approval" name="politician_ids_approval" size="8">
+                            {% if approval_data.all_politicians is not none and not approval_data.all_politicians.empty %}
+                                {% for pol in approval_data.all_politicians.to_dict(orient='records') %}<option value="{{ pol.politician_id }}" {% if pol.politician_id in approval_data.selected_politician_ids %}selected{% endif %}>{{ pol.name }}</option>{% endfor %}
+                            {% else %}<option disabled>Politician list unavailable.</option>{% endif %}
+                        </select>
+                        <small class="form-text-hint">Hold Ctrl/Cmd to select multiple.</small>
+                    </div>
+                    <button type="submit" class="button-primary">Update Approval Chart</button>
+                </form>
+
+                {% if approval_data.selected_politician_names %}
+                    <h3 style="margin-top: 1.5rem;">
+                    {% if approval_data.selected_politician_names|length == 1 %}Approval Trend for: {{ approval_data.selected_politician_names[0] }}
+                    {% elif approval_data.selected_politician_names|length > 1 %}Approval Trend Comparison for {{ approval_data.selected_politician_names|length }} politicians
+                    {% endif %}</h3>
+                {% endif %}
+                {% if approval_data.weekly_approval_img_base64 %}
+                    <div class="plot-container"><img src="data:image/png;base64,{{ approval_data.weekly_approval_img_base64 }}" alt="Weekly Approval Chart" style="max-width: 100%; height: auto;"></div>
+                {% elif approval_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_approval', '') %}
+                    <div class="info-message">No weekly approval rating data for the selected politician(s).</div>
+                {% elif approval_data.all_politicians is not none and not approval_data.all_politicians.empty %}
+                    <div class="info-message">ℹ️ Select politician(s) above. Default is Donald Trump if available.</div>
+                {% else %}<div class="info-message">Waiting for data...</div>{% endif %}
+                <details class="data-expander">
+                    <summary>View Weekly Approval Data</summary>
+                    {% if approval_data.df_display_ready is not none and not approval_data.df_display_ready.empty %}
+                        <div class="table-scroll-wrapper">{{ approval_data.df_display_ready.to_html(classes='styled-table data-table', index=False, formatters={'weekly_approval_rating_percent': '{:.0f}%'.format, 'week_start_date': '{:%Y-%m-%d}'.format}) | safe }}</div>
+                    {% else %}<p class="text-muted">No data to display.</p>{% endif %}
+                </details>
+            </section>
+        </div> {# END .tab-content-container #}
     {# --- TOP WORD TAB CONTENT --- #}
     {% elif active_tab == 'top_word' %}
-        {# ... (top_word tab content as before) ... #}
-        <section id="top-word-content">
-            <h2>Top Weekly Word</h2>
-            <p>Shows the most frequently used word for the selected politician each week.</p>
-            <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
-                <input type="hidden" name="tab" value="top_word">
-                <div class="form-group" style="margin-bottom: 1rem;">
-                    <label for="politician_selector_top_word" class="form-label">Select Politician:</label>
-                    <select class="form-multiselect" id="politician_selector_top_word" name="politician_id_top_word" onchange="this.form.submit()">
-                        {% if top_word_data.all_politicians is not none and not top_word_data.all_politicians.empty %}
-                            {% for pol in top_word_data.all_politicians.to_dict(orient='records') %}<option value="{{ pol.politician_id }}" {% if pol.politician_id == top_word_data.selected_politician_id %}selected{% endif %}>{{ pol.name }}</option>{% endfor %}
-                        {% else %}<option disabled>Politician list unavailable.</option>{% endif %}
-                    </select>
-                </div>
-            </form>
-            {% if top_word_data.selected_politician_name and top_word_data.selected_politician_name != "N/A" %}
-                <h3 style="margin-top: 1.5rem;">Top Weekly Word for {{ top_word_data.selected_politician_name }}</h3>
-            {% endif %}
-            {% if top_word_data.top_words_list %}
-                <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 600px;"> 
-                    <table class="styled-table data-table feed-table">
-                        <thead><tr><th>Week (YYYY-IW)</th><th style="white-space: nowrap;">Week Start Date</th><th>Top Word Used</th><th style="text-align: right;">Votes for Top Word</th><th style="text-align: right;">Total Votes This Week</th></tr></thead>
-                        <tbody>{% for row in top_word_data.top_words_list %}<tr><td>{{ row['Week (YYYY-IW)'] }}</td><td style="white-space: nowrap;">{{ row['Week Start Date'] }}</td><td>{{ row['Top Word Used'] }}</td><td style="text-align: right;">{{ row['Votes for Top Word'] }}</td><td style="text-align: right;">{{ row['Total Votes This Week'] }}</td></tr>{% endfor %}</tbody>
-                    </table></div>
-            {% elif top_word_data.selected_politician_id %}<div class="info-message">No top word data found for {{ top_word_data.selected_politician_name or "the selected politician" }}.</div>
-            {% elif top_word_data.all_politicians is not none and not top_word_data.all_politicians.empty %}<div class="info-message">ℹ️ Select a politician above. Default is Donald Trump.</div>
-            {% else %}<div class="info-message">Politician data unavailable.</div>{% endif %}
-        </section>
+        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+            <section id="top-word-content">
+                <h2>Top Weekly Word</h2>
+                <p>Shows the most frequently used word for the selected politician each week.</p>
+
+                {# Form directly in tab-content-container #}
+                <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
+                    <input type="hidden" name="tab" value="top_word">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="politician_selector_top_word" class="form-label">Select Politician:</label>
+                        <select class="form-multiselect" id="politician_selector_top_word" name="politician_id_top_word" onchange="this.form.submit()">
+                            {% if top_word_data.all_politicians is not none and not top_word_data.all_politicians.empty %}
+                                {% for pol in top_word_data.all_politicians.to_dict(orient='records') %}<option value="{{ pol.politician_id }}" {% if pol.politician_id == top_word_data.selected_politician_id %}selected{% endif %}>{{ pol.name }}</option>{% endfor %}
+                            {% else %}<option disabled>Politician list unavailable.</option>{% endif %}
+                        </select>
+                    </div>
+                </form>
+
+                {% if top_word_data.selected_politician_name and top_word_data.selected_politician_name != "N/A" %}
+                    <h3 style="margin-top: 1.5rem;">Top Weekly Word for {{ top_word_data.selected_politician_name }}</h3>
+                {% endif %}
+                {% if top_word_data.top_words_list %}
+                    <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 600px;">
+                        <table class="styled-table data-table top-word-data-table"> {# Ensure CSS has rules for this class #}
+                            <thead><tr><th>Week (YYYY-IW)</th><th style="white-space: nowrap;">Week Start Date</th><th>Top Word Used</th><th style="text-align: right;">Votes for Top Word</th><th style="text-align: right;">Total Votes This Week</th></tr></thead>
+                            <tbody>{% for row in top_word_data.top_words_list %}<tr><td>{{ row['Week (YYYY-IW)'] }}</td><td style="white-space: nowrap;">{{ row['Week Start Date'] }}</td><td>{{ row['Top Word Used'] }}</td><td style="text-align: right;">{{ row['Votes for Top Word'] }}</td><td style="text-align: right;">{{ row['Total Votes This Week'] }}</td></tr>{% endfor %}</tbody>
+                        </table>
+                    </div>
+                {% elif top_word_data.selected_politician_id %}<div class="info-message">No top word data found for {{ top_word_data.selected_politician_name or "the selected politician" }}.</div>
+                {% elif top_word_data.all_politicians is not none and not top_word_data.all_politicians.empty %}<div class="info-message">ℹ️ Select a politician above. Default is Donald Trump.</div>
+                {% else %}<div class="info-message">Politician data unavailable.</div>{% endif %}
+            </section>
+        </div> {# END .tab-content-container #}
     {# --- SIMILARITY TAB CONTENT --- #}
     {% elif active_tab == 'similarity' %}
-        {# ... (similarity tab content as before) ... #}
-        <section id="valence-similarity-content">
-            <h2>Sentiment Similarity Matrix</h2>
-            <p>Heatmap shows similarity based on sentiment profiles. Score closer to 1 indicates more similar profiles. Politicians are ordered by total submissions for "All Available".</p>
-            <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form">
-                <input type="hidden" name="tab" value="similarity">
-                <div class="form-group" style="margin-bottom: 1rem;">
-                    <label for="politician_multiselector_similarity" class="form-label">Select Politicians (Max {{ similarity_data.MAX_HEATMAP_POLITICIANS }} shown, ordered by total votes):</label>
-                    <p><small><input type="checkbox" name="politician_select_mode_similarity" value="All" {% if 'All' in request.args.get('politician_select_mode_similarity', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available (Top {{similarity_data.MAX_HEATMAP_POLITICIANS}} by total votes)</small></p>
-                    <select multiple class="form-multiselect" id="politician_multiselector_similarity" name="politician_ids_similarity" size="10">
-                        {% if similarity_data.available_politicians %}{% for pol in similarity_data.available_politicians %}<option value="{{ pol.politician_id }}" {% if pol.politician_id in similarity_data.selected_politician_ids %}selected{% endif %}>{{ pol.politician_name }} (Votes: {{ pol.total_votes }})</option>{% endfor %}{% else %}<option disabled>No politicians found.</option>{% endif %}
-                    </select>
-                    <small class="form-text-hint">Hold Ctrl/Cmd to select multiple. Default selection is top 5 by total votes.</small>
-                </div>
-                <button type="submit" class="button-primary">Generate Heatmap</button>
-            </form>
-            {% if similarity_data.heatmap_img_base64 %}<div class="plot-container"><img src="data:image/png;base64,{{ similarity_data.heatmap_img_base64 }}" alt="Valence Similarity Heatmap" style="max-width: 100%; height: auto;"></div>
-            {% elif (similarity_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.df_for_similarity_calc is not none and similarity_data.df_for_similarity_calc|length <= 1 %}<div class="info-message">Need at least two politicians for similarity analysis.</div>
-            {% elif similarity_data.available_politicians %}<div class="info-message">ℹ️ Select politician(s) above. Default selection is top 5 by total votes.</div>
-            {% else %}<div class="info-message">No politicians available for similarity analysis.</div>{% endif %}
-            {% if similarity_data.df_for_similarity_calc is not none and not similarity_data.df_for_similarity_calc.empty and similarity_data.df_for_similarity_calc|length >= similarity_data.MAX_HEATMAP_POLITICIANS and 'All' in request.args.get('politician_select_mode_similarity', '') %}<div class="warning-message">Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} politicians by total votes.</div>
-            {% elif similarity_data.selected_politician_ids and not ('All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.selected_politician_ids|length > similarity_data.MAX_HEATMAP_POLITICIANS %}<div class="warning-message">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>{% endif %}
-            <details class="data-expander"><summary>View Similarity Matrix Data</summary>
-                {% if similarity_data.similarity_df_html %}<div class="table-scroll-wrapper">{{ similarity_data.similarity_df_html | safe }}</div>
-                {% elif similarity_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_similarity', '') %}<p class="text-muted">Not enough data or politicians to generate matrix from current selection.</p>
-                {% else %}<p class="text-muted">No data to display.</p>{% endif %}
-            </details>
-        </section>
+        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+            <section id="valence-similarity-content">
+                <h2>Sentiment Similarity Matrix</h2>
+                <p>Heatmap shows similarity based on sentiment profiles. Score closer to 1 indicates more similar profiles. Politicians are ordered by total submissions for "All Available".</p>
 
+                {# Form directly in tab-content-container #}
+                <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
+                    <input type="hidden" name="tab" value="similarity">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="politician_multiselector_similarity" class="form-label">Select Politicians (Max {{ similarity_data.MAX_HEATMAP_POLITICIANS }} shown, ordered by total votes):</label>
+                        <p><small><input type="checkbox" name="politician_select_mode_similarity" value="All" {% if 'All' in request.args.get('politician_select_mode_similarity', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available (Top {{similarity_data.MAX_HEATMAP_POLITICIANS}} by total votes)</small></p>
+                        <select multiple class="form-multiselect" id="politician_multiselector_similarity" name="politician_ids_similarity" size="10">
+                            {% if similarity_data.available_politicians %}{% for pol in similarity_data.available_politicians %}<option value="{{ pol.politician_id }}" {% if pol.politician_id in similarity_data.selected_politician_ids %}selected{% endif %}>{{ pol.politician_name }} (Votes: {{ pol.total_votes }})</option>{% endfor %}{% else %}<option disabled>No politicians found.</option>{% endif %}
+                        </select>
+                        <small class="form-text-hint">Hold Ctrl/Cmd to select multiple. Default selection is top 5 by total votes.</small>
+                    </div>
+                    <button type="submit" class="button-primary">Generate Heatmap</button>
+                </form>
+
+                {% if similarity_data.heatmap_img_base64 %}<div class="plot-container"><img src="data:image/png;base64,{{ similarity_data.heatmap_img_base64 }}" alt="Valence Similarity Heatmap" style="max-width: 100%; height: auto;"></div>
+                {% elif (similarity_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.df_for_similarity_calc is not none and similarity_data.df_for_similarity_calc|length <= 1 %}<div class="info-message">Need at least two politicians for similarity analysis.</div>
+                {% elif similarity_data.available_politicians %}<div class="info-message">ℹ️ Select politician(s) above. Default selection is top 5 by total votes.</div>
+                {% else %}<div class="info-message">No politicians available for similarity analysis.</div>{% endif %}
+                {% if similarity_data.df_for_similarity_calc is not none and not similarity_data.df_for_similarity_calc.empty and similarity_data.df_for_similarity_calc|length >= similarity_data.MAX_HEATMAP_POLITICIANS and 'All' in request.args.get('politician_select_mode_similarity', '') %}<div class="warning-message">Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} politicians by total votes.</div>
+                {% elif similarity_data.selected_politician_ids and not ('All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.selected_politician_ids|length > similarity_data.MAX_HEATMAP_POLITICIANS %}<div class="warning-message">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>{% endif %}
+                <details class="data-expander"><summary>View Similarity Matrix Data</summary>
+                    {% if similarity_data.similarity_df_html %}<div class="table-scroll-wrapper">{{ similarity_data.similarity_df_html | safe }}</div>
+                    {% elif similarity_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_similarity', '') %}<p class="text-muted">Not enough data or politicians to generate matrix from current selection.</p>
+                    {% else %}<p class="text-muted">No data to display.</p>{% endif %}
+                </details>
+            </section>
+        </div> {# END .tab-content-container #}
     {# --- OVERVIEW TAB CONTENT (Formerly DATASET) --- #}
     {% elif active_tab == 'overview' %}
-        <section id="overview-metrics-content">
-            <h2>Dataset Overview</h2>
-            <p>Basic statistics about the underlying dataset.</p>
-            {% if overview_data and overview_data.metrics %}
-                <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; margin-left: auto; margin-right: auto;">
-                    <ul style="list-style-type: none; padding-left: 0;">
-                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;"> 
-                            <strong>Politicians:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_politicians }}</span>
-                        </li>
-                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Unique Words:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_words_scorable }}</span>
-                        </li>
-                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Total Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_votes }}</span>
-                        </li>
-                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Net Sentiment:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.net_sentiment_sum_all_submissions }}</span>
-                        </li>
-                        <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Net Sentiment/Submission:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.average_sentiment_score_all_submissions }}</span>
-                        </li>
-                         <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Overall Approval Rating:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.net_approval_rating_percent_all_submissions }}</span>
-                        </li>
-                        {# REMOVED THIS LINE VVVV #}
-                        {# <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                            <strong>Submissions Used For Sentiment:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.votes_contributing_to_sentiment_metrics }}</span>
-                        </li> #}
-                        {# REMOVED THIS LINE ^^^^ #}
-                        <li style="font-size: 1.1em; padding: 8px; overflow: hidden;">
-                            <strong>Data Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.votes_date_range }}</span>
-                        </li>
-                    </ul>
-                </div>
-            {% elif not engine_available %}
-                <p class="text-muted">Database connection not available. Cannot retrieve overview metrics.</p>
-            {% else %}
-                <p class="text-muted">Could not retrieve overview metrics at this time.</p>
-            {% endif %}
-        </section>
-
+        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+            <section id="overview-metrics-content">
+                <h2>Dataset Overview</h2>
+                <p>Basic statistics about the underlying dataset.</p>
+                {% if overview_data and overview_data.metrics %}
+                    <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; margin-left: auto; margin-right: auto;">
+                        <ul style="list-style-type: none; padding-left: 0;">
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Politicians:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_politicians }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Unique Words:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_words_scorable }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Total Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_votes }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Net Sentiment:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.net_sentiment_sum_all_submissions }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Net Sentiment/Submission:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.average_sentiment_score_all_submissions }}</span>
+                            </li>
+                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Overall Approval Rating:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.net_approval_rating_percent_all_submissions }}</span>
+                            </li>
+                            <li style="font-size: 1.1em; padding: 8px; overflow: hidden;">
+                                <strong>Data Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.votes_date_range }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                {% elif not engine_available %}
+                    <p class="text-muted">Database connection not available. Cannot retrieve overview metrics.</p>
+                {% else %}
+                    <p class="text-muted">Could not retrieve overview metrics at this time.</p>
+                {% endif %}
+            </section>
+        </div> {# END .tab-content-container #}
     {# --- FEED TAB CONTENT --- #}
     {% elif active_tab == 'feed' %}
-         <section id="feed-content"> 
-            <h2>Activity Feed</h2> 
-            {# UPDATED Paragraph to reflect rolling 7 days ending today #}
-            <p>Shows submissions recorded from <strong>{{ feed_data.feed_display_period_start }}</strong> to <strong>{{ feed_data.feed_display_period_end }}</strong>, along with the sentiment score of the word used.</p>
-            
-            {% if feed_data and feed_data.latest_feed_items %} 
-                <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 800px;"> 
-                    <table class="styled-table data-table feed-table"> 
-                        <thead>
-                            <tr>
-                                <th style="white-space: nowrap;">Timestamp</th> 
-                                <th>Politician</th>                         
-                                <th>Word</th>                               
-                                <th style="text-align: right;">Sentiment</th>     
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in feed_data.latest_feed_items %} 
-                            <tr>
-                                <td style="white-space: nowrap;">{{ item['Timestamp'] }}</td>
-                                <td>{{ item['Politician'] }}</td>
-                                <td>{{ item['Word'] }}</td>
-                                <td style="text-align: right;">{{ item['Sentiment'] }}</td> 
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% elif not engine_available %}
-                 <p class="text-muted">Database connection not available. Cannot retrieve feed items.</p>
-            {% else %}
-                 {# UPDATED message to use display period variables #}
-                <p class="text-muted">No activity recorded for the period {{ feed_data.feed_display_period_start }} to {{ feed_data.feed_display_period_end }}, or an error occurred.</p> 
-            {% endif %}
-        </section>
+        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+             <section id="feed-content">
+                <h2>Activity Feed</h2>
+                <p>Shows submissions recorded from <strong>{{ feed_data.feed_display_period_start }}</strong> to <strong>{{ feed_data.feed_display_period_end }}</strong>, along with the sentiment score of the word used.</p>
+
+                {% if feed_data and feed_data.latest_feed_items %}
+                    <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 800px;">
+                        <table class="styled-table data-table feed-table">
+                            <thead>
+                                <tr>
+                                    <th style="white-space: nowrap;">Timestamp</th>
+                                    <th>Politician</th>
+                                    <th>Word</th>
+                                    <th style="text-align: right;">Sentiment</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in feed_data.latest_feed_items %}
+                                <tr>
+                                    <td style="white-space: nowrap;">{{ item['Timestamp'] }}</td>
+                                    <td>{{ item['Politician'] }}</td>
+                                    <td>{{ item['Word'] }}</td>
+                                    <td style="text-align: right;">{{ item['Sentiment'] }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% elif not engine_available %}
+                     <p class="text-muted">Database connection not available. Cannot retrieve feed items.</p>
+                {% else %}
+                    <p class="text-muted">No activity recorded for the period {{ feed_data.feed_display_period_start }} to {{ feed_data.feed_display_period_end }}, or an error occurred.</p>
+                {% endif %}
+            </section>
+        </div> {# END .tab-content-container #}
     {% endif %}
 {% endblock %}
 
@@ -259,9 +271,9 @@ function updateSliderValue(sliderId, outputId) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const sentimentSlider = document.getElementById('min_votes_slider_sentiment'); 
+    const sentimentSlider = document.getElementById('min_votes_slider_sentiment');
     const sentimentOutput = document.getElementById('slider_value_sentiment');
-    if (sentimentSlider && sentimentOutput) { 
+    if (sentimentSlider && sentimentOutput) {
         sentimentOutput.innerHTML = sentimentSlider.value;
     }
 });

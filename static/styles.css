@@ -1,13 +1,13 @@
 /* static/styles.css */
 
-html { /* ADDED/MODIFIED */
+html {
   box-sizing: border-box;
-  min-height: 100vh; /* Ensures HTML element can fill viewport height */
-  margin: 0;         /* Reset default browser margin */
-  padding: 0;        /* Reset default browser padding */
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
 }
 
-*, *::before, *::after { /* ADDED for universal box-sizing */
+*, *::before, *::after {
   box-sizing: inherit;
 }
 
@@ -16,7 +16,7 @@ body, html {
   padding: 0;
   min-height: 100%;
   width: 100%;
-  overflow-x: hidden; 
+  overflow-x: hidden;
 }
 
 body {
@@ -25,18 +25,47 @@ body {
   font-family: "Inter", "Segoe UI", sans-serif;
   background-color: #f8f8f8;
   color: #2e2e2e;
-  padding-top: 68px; /* Default desktop padding, adjust after inspecting final navbar height */
-  /* box-sizing: border-box; /* Inherited from html */
-  min-height: 100vh; /* ADDED: Body must also be able to fill viewport height */
-  margin: 0;         /* Ensure no body margin from user agent */
-  /* No padding-bottom here unless you specifically want a space *below* the footer
-     when the footer is at the very bottom of the viewport.
-     If you want space *between* content and footer, that's handled by
-     the main content wrapper's bottom margin or the footer's top padding. */
+  padding-top: 68px; /* Default desktop padding, adjust based on final navbar height */
+  min-height: 100vh;
+  margin: 0;
 }
 
-.main-content-wrapper { padding: 1rem; flex-grow: 1; width: 100%; box-sizing: border-box; }
-.footer { margin-top: auto; padding: 10px 20px; background-color: #f8f8f8; text-align: center; width: 100%; box-sizing: border-box; color: #666; }
+.main-content-wrapper {
+  padding: 1rem 0; /* Vertical padding only */
+  flex-grow: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* --- General Container for ALL content within each tab --- */
+.tab-content-container {
+  max-width: 800px; /* PRIMARY MAX-WIDTH for all tab content */
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 1rem;   /* Horizontal padding for content INSIDE this centered block */
+  width: 100%;       /* Responsive below max-width */
+}
+
+/* Optional: Distinct visual box for forms, if used INSIDE .tab-content-container */
+.controls-container {
+  margin-bottom: 1.5rem;
+  padding: 1rem; /* Internal padding for the form box */
+  background-color: #fdfdfd;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+}
+
+
+.footer {
+  margin-top: auto;
+  padding: 10px 20px;
+  background-color: #f8f8f8;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  color: #666;
+  flex-shrink: 0;
+}
 .footer-link { color: #70c1b3; }
 
 /* --- Navigation Tabs --- */
@@ -45,175 +74,291 @@ body {
 .tab-link:hover { background-color: #d7f0fa; }
 .tab-link.active { background-color: #bce0f0; font-weight: bold; }
 
-/* --- Navbar (Using your flex-grow approach for title) --- */
+/* --- Navbar --- */
 .navbar {
-  background-color: #bce0f0; 
+  background-color: #bce0f0;
   overflow: hidden;
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   z-index: 2000;
-  display: flex; 
-  align-items: center;  /* Vertically center items */
-  justify-content: space-between; /* Distribute space */
-  padding: 10px 15px; /* Overall navbar padding */
-  box-sizing: border-box; 
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 15px;
+  box-sizing: border-box;
 }
-
-/* Containers for left and right links to help with balancing */
-.navbar .nav-left, .navbar .nav-right {
-    display: flex; /* To ensure the 'a' tag inside behaves well */
+.navbar .nav-left, .navbar .nav-right, .navbar .navbar-right-menu {
+    display: flex;
     align-items: center;
-    /* Set a flex-basis or width to ensure they are balanced for perfect title centering */
-    /* flex-basis: 100px; /* Example: Adjust this based on typical link width */
-    /* Or, if using for a single link, let link's padding define width */
-    /* If a link is much wider than the other, the title won't be perfectly viewport-centered */
 }
+.navbar .nav-left { justify-content: flex-start; }
+.navbar .nav-right { justify-content: flex-end; min-width: 80px; }
+.navbar .navbar-right-menu { justify-content: flex-end; }
 
-.navbar .nav-left {
-    justify-content: flex-start; /* Align content to the start */
-}
-.navbar .nav-right {
-    justify-content: flex-end; /* Align content to the end */
-     min-width: 80px; /* Ensure it has some width to balance the left link, adjust as needed */
-}
-
-
-.navbar a { /* General styling for ALL links within .navbar */
-  display: block; /* Or inline-block if preferred within .nav-left/.nav-right */
+.navbar a {
+  display: block;
   color: #2e2e2e;
   text-align: center;
-  padding: 14px 16px; /* This gives links their size */
+  padding: 14px 16px;
   text-decoration: none;
   font-size: 17px;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.2s ease;
   white-space: nowrap;
 }
-.navbar a:hover {
-  background-color: #d7f0fa;
-  color: #2e2e2e;
-}
-
+.navbar a:hover { background-color: #d7f0fa; color: #2e2e2e; }
 .navbar-title {
-  flex-grow: 1; /* Allows title to take up the space BETWEEN .nav-left and .nav-right */
-  text-align: center; /* Centers text within its allocated space */
+  flex-grow: 1;
+  text-align: center;
   color: #2e2e2e;
   font-size: 20px;
   font-weight: bold;
   white-space: nowrap;
-  margin: 0 5px; /* Small margin so title doesn't touch links if they get very close */
-  /* To prevent title from shrinking if side elements are wide: */
-  flex-shrink: 0; /* Optional, but can help if title text is long */
-  min-width: 0; /* Allows flex-shrink to work properly with long text if needed */
+  margin: 0 5px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
+/* --- Forms & Common UI Elements (will be inside .tab-content-container) --- */
+.form-group { margin-bottom: 1.5rem; }
+.form-label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+.form-multiselect { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem; line-height: 1.4;  margin-bottom: 0.5rem; }
+.form-multiselect option { padding: 4px 8px; }
+.form-text-hint { font-size: 0.8rem; color: #666; display: block; margin-top: 0.3rem; }
+.form-range-slider { width: 100%; margin-top: 5px; margin-bottom: 5px; cursor: pointer; }
+.slider-container { margin-bottom: 1.5rem; }
+.slider-label-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.slider-current-value { font-weight: bold; color: #337ab7; min-width: 30px; text-align: right; }
+button.button-primary { background-color: #76B0DF; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; transition: background-color 0.2s ease; display: block; width: 100%; margin-top: 1rem; }
+button.button-primary:hover { background-color: #5c9acb; }
 
-/* --- Forms, Tables, Utils (condensed for brevity - assume unchanged) --- */
-.form-group { margin-bottom: 1.5rem; } .form-label { display: block; margin-bottom: 0.5rem; font-weight: bold; } .form-multiselect { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem; line-height: 1.4;  margin-bottom: 0.5rem; } .form-multiselect option { padding: 4px 8px; } .form-text-hint { font-size: 0.8rem; color: #666; display: block; margin-top: 0.3rem; } .form-range-slider { width: 80%; margin-top: 5px; margin-bottom: 5px; cursor: pointer; } .slider-container { margin-bottom: 1.5rem; } .slider-label-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; } .slider-current-value { font-weight: bold; color: #337ab7; min-width: 30px; text-align: right; } button.button-primary { background-color: #76B0DF; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; transition: background-color 0.2s ease; } button.button-primary:hover { background-color: #5c9acb; }
-.table-scroll-wrapper { max-height: 400px; overflow-y: auto; overflow-x: auto; border: 1px solid #ddd; margin-top: 0.5rem; width: 100%; box-sizing: border-box; } .styled-table { width: 100%; border-collapse: collapse; font-size: 0.9em; } .styled-table th, .styled-table td { border: 1px solid #ddd; padding: 8px; text-align: left; } .styled-table th { background-color: #f2f2f2; position: sticky; top: 0; z-index: 1; font-weight: bold; } .styled-table tbody tr:nth-child(even) { background-color: #f9f9f9; } .styled-table tbody tr:hover { background-color: #f1f1f1; }
-.feed-table-wrapper { max-width: 850px; margin-left: auto; margin-right: auto; } .feed-table th, .feed-table td { padding: 6px 8px; white-space: nowrap; }
-.plot-container { text-align: center; margin: 1.5rem 0; } .plot-container img { max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; } .info-message, .warning-message { padding: 10px 15px; border-radius: 5px; margin: 1rem 0; text-align: center; } .info-message { background-color: #eef; color: #336; border: 1px solid #cce; } .warning-message { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; } .data-expander summary { cursor: pointer; font-weight: bold; margin-bottom: 0.5rem; color: #337ab7; } .data-expander summary:hover { text-decoration: underline; } .text-muted { color: #6c757d; font-style: italic; } .contribute-link-container { text-align: center; margin-bottom: 1.5rem; padding-top: 5px; } .contribute-link-container a { color: #76B0DF; font-weight: bold; } .metrics-container ul { list-style-type: none; padding-left: 0; } 
-div.metrics-container ul li { /* More specific selector */
-  margin-bottom: 12px; 
-  font-size: 1.0em !important; /* TARGET: Base desktop size (adjust as needed) */
-  padding: 8px; 
-  border-bottom: 1px solid #eee; 
-  overflow: hidden; 
-} 
-div.metrics-container ul li span { /* More specific selector */
-  float: right; 
-  font-weight: bold; 
-  color: #337ab7; 
+/* --- General Table Styles --- */
+.table-scroll-wrapper {
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #ddd;
+  margin-top: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
 }
+
+.styled-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.styled-table th, .styled-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.styled-table th {
+  background-color: #f2f2f2;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-weight: bold;
+}
+.styled-table tbody tr:nth-child(even) { background-color: #f9f9f9; }
+.styled-table tbody tr:hover { background-color: #f1f1f1; }
+
+
+/* --- Styles for Centered, Compact Tables (Feed & Top Word) --- */
+.feed-table-wrapper {
+  width: 100%; /* Will be 100% of parent .tab-content-container */
+  /* border and overflow are handled by .table-scroll-wrapper if also applied */
+}
+
+.feed-table-wrapper table.feed-table,
+.feed-table-wrapper table.top-word-data-table {
+  table-layout: fixed !important;
+  width: 100%;
+}
+
+.feed-table-wrapper table th,
+.feed-table-wrapper table td {
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  -webkit-hyphens: auto;
+  -moz-hyphens: auto;
+  -ms-hyphens: auto;
+  hyphens: auto;
+}
+
+/* Column width definitions for the FEED table (4 columns) */
+.feed-table-wrapper table.feed-table th:nth-child(1),
+.feed-table-wrapper table.feed-table td:nth-child(1) { width: 28%; }
+.feed-table-wrapper table.feed-table th:nth-child(2),
+.feed-table-wrapper table.feed-table td:nth-child(2) { width: 30%; }
+.feed-table-wrapper table.feed-table th:nth-child(3),
+.feed-table-wrapper table.feed-table td:nth-child(3) { width: 22%; }
+.feed-table-wrapper table.feed-table th:nth-child(4),
+.feed-table-wrapper table.feed-table td:nth-child(4) { width: 20%; text-align: right; }
+
+/* Column width definitions for the TOP WORD table (5 columns) */
+.feed-table-wrapper table.top-word-data-table th:nth-child(1),
+.feed-table-wrapper table.top-word-data-table td:nth-child(1) { width: 20%; }
+.feed-table-wrapper table.top-word-data-table th:nth-child(2),
+.feed-table-wrapper table.top-word-data-table td:nth-child(2) { width: 20%; }
+.feed-table-wrapper table.top-word-data-table th:nth-child(3),
+.feed-table-wrapper table.top-word-data-table td:nth-child(3) { width: 25%; }
+.feed-table-wrapper table.top-word-data-table th:nth-child(4),
+.feed-table-wrapper table.top-word-data-table td:nth-child(4) { width: 17%; text-align: right; }
+.feed-table-wrapper table.top-word-data-table th:nth-child(5),
+.feed-table-wrapper table.top-word-data-table td:nth-child(5) { width: 18%; text-align: right; }
+
+
+/* --- Plot & Messages & Misc Utils (will be inside .tab-content-container) --- */
+.plot-container { text-align: center; margin: 1.5rem 0; }
+.plot-container img { max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; }
+.info-message, .warning-message { padding: 10px 15px; border-radius: 5px; margin: 1rem 0; text-align: center; }
+.info-message { background-color: #eef; color: #336; border: 1px solid #cce; }
+.warning-message { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+.data-expander summary { cursor: pointer; font-weight: bold; margin-bottom: 0.5rem; color: #337ab7; }
+.data-expander summary:hover { text-decoration: underline; }
+.text-muted { color: #6c757d; font-style: italic; }
+.contribute-link-container { text-align: center; margin-bottom: 1.5rem; padding-top: 5px; }
+.contribute-link-container a { color: #76B0DF; font-weight: bold; }
+
+/* --- Metrics Container (Overview Tab) --- */
+.metrics-container { /* This is the div with the white background/shadow */
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  width: 100%;       /* Takes full width of its parent (section inside .tab-content-container) */
+  margin-top: 1rem;    /* Example vertical spacing */
+  margin-bottom: 1rem; /* Example vertical spacing */
+  padding: 0 !important;
+  max-width: 100% !important;          /* NO PADDING on the .metrics-container div itself */
+}
+.metrics-container ul { /* The list INSIDE .metrics-container gets the padding */
+  list-style-type: none;
+  padding: 20px;       /* PADDING for the list items from the edge of .metrics-container */
+  margin: 0; /* Remove default ul margin */
+}
+div.metrics-container ul li {
+  margin-bottom: 12px;
+  font-size: 1.0em !important;
+  padding: 8px 0; /* Vertical padding for li, horizontal comes from ul's padding */
+  border-bottom: 1px solid #eee;
+  overflow: hidden;
+}
+div.metrics-container ul li:last-child {
+    border-bottom: none; /* Optional: remove border from last item */
+}
+div.metrics-container ul li strong {
+  display: inline-block;
+}
+div.metrics-container ul li span {
+  float: right;
+  font-weight: bold;
+  color: #337ab7;
+}
+
 
 /* --- Responsive Adjustments --- */
-@media (max-width: 768px) { 
-    .form-range-slider { width: 95%; }
+@media (max-width: 768px) { /* Tablet */
     .styled-table { font-size: 0.85em; }
     .styled-table th, .styled-table td { padding: 6px; }
-    div.metrics-container ul li { /* More specific selector */
-        font-size: 0.9em !important; /* TARGET: Slightly smaller on tablets */
+
+    .tab-content-container {
+        padding: 0 0.75rem; /* Adjust horizontal padding of the main content column */
     }
+    .controls-container { /* If used */
+        /* padding: 0.75rem; */
+    }
+
+    .feed-table-wrapper table.feed-table,
+    .feed-table-wrapper table.top-word-data-table {
+        font-size: 0.85em;
+    }
+    .feed-table-wrapper table.feed-table th, .feed-table-wrapper table.feed-table td,
+    .feed-table-wrapper table.top-word-data-table th, .feed-table-wrapper table.top-word-data-table td {
+        padding: 6px;
+    }
+
+    div.metrics-container ul li { font-size: 0.9em !important; }
+    .metrics-container ul { padding: 15px; } /* Adjust ul padding on tablet */
 }
 
-@media (max-width: 680px) { 
+@media (max-width: 680px) { /* Large Mobile */
     .dashboard-tabs { width: 100%; justify-content: space-around; padding: 0 2px; gap: 2px; }
     .tab-link { flex-grow: 1; flex-basis: 0; padding: 10px 3px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
-    
-    /* Navbar adjustments for mobile */
-    .navbar {
-        padding: 5px 10px; /* Reduce overall navbar padding for mobile */
-    }
-    .navbar .nav-left, .navbar .nav-right {
-        /* Ensure these don't shrink away on mobile */
-        flex-shrink: 0; 
-        /* Adjust min-width if necessary for balance, or remove if links should dictate width */
-        /* min-width: 60px; /* Example */
-    }
-    .navbar a { 
-      font-size: 16px;   /* Target larger font for links */
-      padding: 12px 10px; /* Adjust vertical padding to get desired height */
-                           /* 12px (top) + 12px (bottom) + ~19px (16px font line-height) = ~43px target for links */
-                           /* The navbar itself has 5px top/bottom padding, so total ~53px */
-    }
-    .navbar-title {
-      font-size: 17px; /* Target larger font for title */
-      margin: 0 5px; /* Reduce margin for tighter fit */
-    }
-    /* -------- IMPORTANT: SET THIS BASED ON INSPECTOR -------- */
-    body { padding-top: 53px; /* Example: Replace with computed height of .navbar after style changes */ }
 
+    .navbar { padding: 5px 10px; }
+    .navbar .nav-left, .navbar .nav-right, .navbar .navbar-right-menu { flex-shrink: 0; }
+    .navbar a { font-size: 16px; padding: 12px 10px; }
+    .navbar-title { font-size: 17px; margin: 0 5px; }
+    body { padding-top: 53px; }
 
+    .tab-content-container {
+        max-width: 100%;
+        padding: 0 10px; /* Adjust horizontal padding of the main content column */
+    }
+    .controls-container { /* If used */
+        padding: 0.75rem;
+    }
+
+    .feed-table-wrapper {
+        border-left: none;
+        border-right: none;
+    }
     .styled-table th, .styled-table td { font-size: 13px; padding: 5px; }
-    .feed-table th, .feed-table td { font-size: 12px; padding: 4px 5px; }
-    div.metrics-container ul li { /* More specific selector */
-        font-size: 0.9em; /* TARGET: Smaller on mobile */
+
+    .feed-table-wrapper table.feed-table,
+    .feed-table-wrapper table.top-word-data-table {
+        font-size: 0.8em;
     }
+    .feed-table-wrapper table.feed-table th, .feed-table-wrapper table.feed-table td,
+    .feed-table-wrapper table.top-word-data-table th, .feed-table-wrapper table.top-word-data-table td {
+        font-size: 12px;
+        padding: 4px 5px;
+    }
+
+    div.metrics-container ul li { font-size: 0.9em; }
+    .metrics-container {
+        border-radius: 0; /* Optional for edge-to-edge look */
+        box-shadow: none;  /* Optional for edge-to-edge look */
+    }
+    .metrics-container ul { padding: 15px 10px; } /* Adjust ul padding on mobile */
 }
 
-@media (max-width: 480px) { 
+@media (max-width: 480px) { /* Small Mobile */
     .tab-link { padding: 8px 2px; font-size: 11px; }
     .dashboard-tabs { gap: 1px; }
 
-    .navbar {
-        padding: 4px 8px; 
+    .navbar { padding: 4px 8px; }
+    .navbar a { font-size: 15px; padding: 10px 8px; }
+    .navbar-title { font-size: 16px; }
+    body { padding-top: 46px; }
+
+    .tab-content-container {
+        padding: 0 5px; /* Adjust horizontal padding of the main content column */
     }
-    .navbar a {
-      font-size: 15px; 
-      padding: 10px 8px; /* 10+10 + ~18 = ~38px for links */
-                          /* Navbar total with its padding: ~46px */
+    .controls-container { /* If used */
+        padding: 0.5rem;
     }
-    .navbar-title {
-      font-size: 16px;
-    }
-    /* -------- IMPORTANT: SET THIS BASED ON INSPECTOR -------- */
-    body { padding-top: 46px; /* Example: Replace with computed height */ }
 
     .styled-table th, .styled-table td { font-size: 12px; padding: 4px; }
-    .feed-table th, .feed-table td { font-size: 10px; padding: 3px 4px; }
-    div.metrics-container ul li { /* More specific selector */
-        font-size: 0.85em; /* TARGET: Even smaller on very small screens */
+
+    .feed-table-wrapper table.feed-table,
+    .feed-table-wrapper table.top-word-data-table {
+        font-size: 0.75em;
     }
+     .feed-table-wrapper table.feed-table th, .feed-table-wrapper table.feed-table td,
+    .feed-table-wrapper table.top-word-data-table th, .feed-table-wrapper table.top-word-data-table td {
+        font-size: 10px;
+        padding: 3px 4px;
+    }
+
+    div.metrics-container ul li { font-size: 0.85em; }
+    .metrics-container ul { padding: 10px 5px; } /* Adjust ul padding on small mobile */
 }
 
-.footer {
-  margin-top: auto; /* This works with flex-grow on the main content */
-  padding: 10px 20px;
-  background-color: #f8f8f8;
-  text-align: center;
-  width: 100%;
-  /* box-sizing: border-box; /* Inherited */
-  color: #666;
-  flex-shrink: 0; /* ADDED: Good practice, ensures footer doesn't shrink */
-}
-
-/* ---- START: Added rule for the "Click a word to agree" h2 ---- */
 .footer p {
-  font-size: 0.8rem; /* Default h2 is often 1.5em (e.g., 24px). This makes it ~20px. */
-  /* You can adjust 1.25rem to 1.2rem or 1.15rem if you want it even smaller */
+  font-size: 0.8rem;
 }
-/* ---- END: Added rule ---- */
-
-  
