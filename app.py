@@ -1,12 +1,13 @@
-# app.py
+# Copyright 2024-2025 soap.fyi. All rights reserved. <https://soap.fyi>
+
 import matplotlib
 matplotlib.use('Agg') # Should be very early
 
 from dotenv import load_dotenv
 load_dotenv() # Load .env before other imports that might use env vars
 
-import os # Make sure os is imported early
-from flask import Flask, render_template, request, url_for, send_from_directory, jsonify # Keep redirect for future use
+import os 
+from flask import Flask, render_template, request, url_for, send_from_directory, jsonify
 import pandas as pd
 from sqlalchemy import create_engine, text
 import matplotlib.pyplot as plt
@@ -15,13 +16,13 @@ from io import BytesIO
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import base64
-import datetime # Added for date formatting in dataset metrics
+import datetime
 
 app = Flask(__name__)
 
 # --- Database Connection ---
+# ... (This section is correct and does not need changes) ...
 DEPLOY_ENV = os.environ.get('DEPLOY_ENV', 'DEVELOPMENT').upper()
-
 def get_env_var(var_name_prefix, key):
     var_to_check = f"{var_name_prefix}_{key.upper()}"
     if DEPLOY_ENV == 'PRODUCTION':
@@ -31,7 +32,6 @@ def get_env_var(var_name_prefix, key):
     else:
         val = os.environ.get(var_to_check)
         return val
-
 def get_engine():
     db_config = {}
     required_keys = ["username", "password", "host", "database"]
@@ -56,7 +56,9 @@ def get_engine():
         return None
 engine = get_engine()
 
+
 # --- Data Fetching Functions ---
+# ... (These are correct and do not need changes) ...
 def fetch_politicians_list(_engine):
     if not _engine: return pd.DataFrame({'politician_id': [], 'name': []})
     query = text("SELECT politician_id, name FROM politicians ORDER BY name ASC;")
@@ -118,7 +120,7 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
         app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}\nQuery was: {query_with_final_order_by}")
         return pd.DataFrame()
 
-def fetch_weekly_approval_rating(_engine, politician_ids_list): # For "Approval" tab (normalized sentiment)
+def fetch_weekly_approval_rating(_engine, politician_ids_list):
     if not _engine or not politician_ids_list: return pd.DataFrame()
     try: safe_politician_ids = tuple(map(int, politician_ids_list))
     except ValueError:
@@ -260,15 +262,14 @@ def fetch_top_weekly_word_for_politician(_engine, politician_id):
         return pd.DataFrame(columns=df_cols)
 
 # --- Plotting Functions ---
-# ... (plotting functions as previously defined) ...
-def plot_stacked_horizontal_bar_to_image(df, categories, category_colors, title, xlabel, ylabel, decimal_places=1): # Removed top_n parameter
+def plot_stacked_horizontal_bar_to_image(df, categories, category_colors, title, xlabel, ylabel, decimal_places=1):
     if df.empty or not all(cat in df.columns for cat in categories): return None
-    data_to_plot = df.copy() # Changed from df.head(top_n).copy() to plot all data
+    data_to_plot = df.copy()
     for cat in categories: data_to_plot[cat] = pd.to_numeric(data_to_plot[cat], errors='coerce').fillna(0)
     plot_df_ready = data_to_plot.set_index('politician_name')[categories]
     plot_df_ready = plot_df_ready.iloc[::-1]
     num_politicians = len(plot_df_ready)
-    fig_height = max(6, min(15, 2 + num_politicians * 0.7)); fig_width = 12 # Height calculation remains, capped at 15
+    fig_height = max(6, min(15, 2 + num_politicians * 0.7)); fig_width = 12
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     plot_df_ready.plot(kind='barh', stacked=True, color=category_colors, ax=ax, width=0.8)
     ax.set_title(title, fontsize=16, pad=15, weight='bold')
@@ -364,16 +365,22 @@ def dashboard():
         dist_img_base64 = None
         if not df_sentiment_dist.empty:
             sentiment_categories = ['positive_percent', 'neutral_percent', 'negative_percent']
-            category_colors_map = {'positive_percent': 'mediumseagreen', 'neutral_percent': 'lightgrey', 'negative_percent': 'lightcoral'}
+            
+            category_colors_map = {
+                'positive_percent': "#2E8B56DD", 
+                'neutral_percent': '#BFBFBF',
+                'negative_percent': "#CD5C5CDE"
+            }
+            
             plotted_categories = [cat for cat in sentiment_categories if cat in df_sentiment_dist.columns]
             category_colors = [category_colors_map[cat] for cat in plotted_categories if cat in category_colors_map]
             if plotted_categories:
-                # Call to plot_stacked_horizontal_bar_to_image no longer needs top_n
                 dist_img_buf = plot_stacked_horizontal_bar_to_image(df_sentiment_dist, categories=plotted_categories, category_colors=category_colors, title='Sentiment Distribution', xlabel='Percentage of Votes (%)', ylabel='')
                 dist_img_base64 = get_image_as_base64(dist_img_buf)
         sentiment_tab_data = {'min_votes_current': min_votes, 'df_sentiment_dist': df_sentiment_dist, 'dist_img_base64': dist_img_base64}
 
     elif active_tab == 'approval':
+        # ... (approval tab logic is correct and does not need changes) ...
         selected_politician_ids_str = request.args.getlist('politician_ids_approval')
         selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
         if not selected_politician_ids_str and not politicians_list_df.empty:
@@ -404,6 +411,7 @@ def dashboard():
         approval_tab_data = {'all_politicians': politicians_list_df, 'selected_politician_ids': selected_politician_ids, 'selected_politician_names': selected_politician_names, 'df_display_ready': df_display_ready, 'weekly_approval_img_base64': weekly_approval_img_base64}
 
     elif active_tab == 'top_word':
+        # ... (top_word tab logic is correct and does not need changes) ...
         selected_pid_top_word_str = request.args.get('politician_id_top_word')
         selected_pid_top_word = None
         if selected_pid_top_word_str and selected_pid_top_word_str.isdigit():
@@ -431,23 +439,42 @@ def dashboard():
         top_word_tab_data = {'all_politicians': politicians_list_df, 'selected_politician_id': selected_pid_top_word, 'selected_politician_name': selected_politician_name_top_word, 'top_words_list': top_words_list_for_template}
 
     elif active_tab == 'similarity':
+        # === START: UPDATED SIMILARITY TAB LOGIC ===
         MAX_HEATMAP_POLITICIANS_CONST = 30
-        df_all_for_selection = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
+        
+        # Fetch all politicians with at least one vote for populating the form
+        df_all_for_selection = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=False)
+        
         available_politicians_for_similarity = []
-        if not df_all_for_selection.empty: available_politicians_for_similarity = df_all_for_selection[['politician_id', 'politician_name', 'total_votes']].to_dict(orient='records')
+        if not df_all_for_selection.empty:
+            # Sort this list alphabetically by name for the form dropdown
+            df_form_list = df_all_for_selection.sort_values('politician_name', ascending=True)
+            available_politicians_for_similarity = df_form_list[['politician_id', 'politician_name']].to_dict(orient='records')
+            # The 'total_votes' is removed from this dict as it's not needed for the display text
+            
         selected_politician_ids_str = request.args.getlist('politician_ids_similarity')
         selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
+        
+        # Default selection logic
         if not selected_politician_ids_str and not df_all_for_selection.empty:
-             if not df_all_for_selection.empty: selected_politician_ids = df_all_for_selection['politician_id'].head(min(5, len(df_all_for_selection))).tolist()
-        ids_for_heatmap_calc = []
-        if "All" in request.args.get('politician_select_mode_similarity', '') and not df_all_for_selection.empty: ids_for_heatmap_calc = df_all_for_selection['politician_id'].tolist()
-        else: ids_for_heatmap_calc = selected_politician_ids
+            # Default to the top 5 by total votes
+            default_selection_df = df_all_for_selection.sort_values('total_votes', ascending=False)
+            selected_politician_ids = default_selection_df['politician_id'].head(min(5, len(default_selection_df))).tolist()
+
+        # Determine which IDs to actually use for the calculation
+        if "All" in request.args.get('politician_select_mode_similarity', '') and not df_all_for_selection.empty:
+            ids_for_heatmap_calc = df_all_for_selection['politician_id'].tolist()
+        else:
+            ids_for_heatmap_calc = selected_politician_ids
+
         heatmap_img_base64 = None
         similarity_df_valence_html = None
         df_for_similarity_calc = pd.DataFrame()
         if ids_for_heatmap_calc and not df_all_for_selection.empty:
             df_selected_full = df_all_for_selection[df_all_for_selection['politician_id'].isin(ids_for_heatmap_calc)]
-            df_for_similarity_calc = df_selected_full.head(MAX_HEATMAP_POLITICIANS_CONST).copy()
+            # Sort the data for the heatmap by total votes, so the most prominent are at the top
+            df_for_similarity_calc = df_selected_full.sort_values('total_votes', ascending=False).head(MAX_HEATMAP_POLITICIANS_CONST).copy()
+
             if not df_for_similarity_calc.empty and len(df_for_similarity_calc) > 1:
                 names = df_for_similarity_calc['politician_name'].tolist()
                 vectors = df_for_similarity_calc[['positive_percent', 'neutral_percent', 'negative_percent']].values
@@ -457,13 +484,24 @@ def dashboard():
                     heatmap_buf = plot_similarity_heatmap_to_image(sim_df, title="Sentiment Similarity Matrix")
                     heatmap_img_base64 = get_image_as_base64(heatmap_buf)
                     similarity_df_valence_html = sim_df.style.format("{:.3f}").to_html(classes='styled-table', border=0)
-        similarity_data_dict = {'available_politicians': available_politicians_for_similarity, 'selected_politician_ids': selected_politician_ids, 'df_for_similarity_calc': df_for_similarity_calc, 'heatmap_img_base64': heatmap_img_base64, 'similarity_df_html': similarity_df_valence_html, 'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST}
+        
+        similarity_data_dict = {
+            'available_politicians': available_politicians_for_similarity, 
+            'selected_politician_ids': selected_politician_ids, 
+            'df_for_similarity_calc': df_for_similarity_calc, 
+            'heatmap_img_base64': heatmap_img_base64, 
+            'similarity_df_html': similarity_df_valence_html, 
+            'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST
+        }
+        # === END: UPDATED SIMILARITY TAB LOGIC ===
 
     elif active_tab == 'overview':
+        # ... (overview tab logic is correct and does not need changes) ...
         metrics = fetch_dataset_metrics(engine)
         overview_tab_data = {'metrics': metrics}
 
     elif active_tab == 'feed':
+        # ... (feed tab logic is correct and does not need changes) ...
         today = datetime.date.today()
         query_end_date = today
         query_start_date = today - datetime.timedelta(days=6)
@@ -477,7 +515,7 @@ def dashboard():
             feed_list_for_template = feed_df.to_dict(orient='records')
             for item in feed_list_for_template:
                 if 'Timestamp' in item and hasattr(item['Timestamp'], 'strftime'):
-                    item['Timestamp'] = item['Timestamp'].strftime('%y-%m-%d %H:%M') # MODIFIED HERE
+                    item['Timestamp'] = item['Timestamp'].strftime('%y-%m-%d %H:%M')
                 if 'Sentiment' in item and pd.notna(item['Sentiment']):
                     try: item['Sentiment'] = f"{float(item['Sentiment']):.2f}"
                     except (ValueError, TypeError): item['Sentiment'] = "N/A"
@@ -499,16 +537,18 @@ def dashboard():
                            feed_data=feed_data_dict,
                            engine_available=bool(engine))
 
-# --- Favicon Route ---
+# --- Favicon & 404 Routes ---
+# ... (These are correct and do not need changes) ...
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
-# --- Custom 404 Error Handler ---
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template('404.html'), 404
 
+# --- Main Entry Point ---
+# ... (This is correct and does not need changes) ...
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
     if not debug_mode and DEPLOY_ENV == 'DEVELOPMENT':

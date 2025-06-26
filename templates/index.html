@@ -1,3 +1,5 @@
+<!-- Copyright 2024-2025 soap.fyi. All rights reserved. <https://soap.fyi>-->
+
 {# templates/index.html (Multi-tab dashboard) #}
 {% extends "base.html" %}
 
@@ -24,7 +26,7 @@
         <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
             <section id="sentiment-ratings-content">
                 <h2>Sentiment Distribution</h2>
-                <p>Shows 'Positive', 'Negative', 'Neutral' word sentiment.</p>
+                <p>Shows the percentage of submissions with positive, negative, or neutral word sentiment.</p>
 
                 {# Form directly in tab-content-container, or use .controls-container if you want a distinct box #}
                 <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
@@ -158,10 +160,10 @@
                 <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
                     <input type="hidden" name="tab" value="similarity">
                     <div class="form-group" style="margin-bottom: 1rem;">
-                        <label for="politician_multiselector_similarity" class="form-label">Select Politicians (Max {{ similarity_data.MAX_HEATMAP_POLITICIANS }} shown, ordered by total votes):</label>
+                        <label for="politician_multiselector_similarity" class="form-label">Select Politicians:</label>
                         <p><small><input type="checkbox" name="politician_select_mode_similarity" value="All" {% if 'All' in request.args.get('politician_select_mode_similarity', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available (Top {{similarity_data.MAX_HEATMAP_POLITICIANS}} by total votes)</small></p>
                         <select multiple class="form-multiselect" id="politician_multiselector_similarity" name="politician_ids_similarity" size="10">
-                            {% if similarity_data.available_politicians %}{% for pol in similarity_data.available_politicians %}<option value="{{ pol.politician_id }}" {% if pol.politician_id in similarity_data.selected_politician_ids %}selected{% endif %}>{{ pol.politician_name }} (Votes: {{ pol.total_votes }})</option>{% endfor %}{% else %}<option disabled>No politicians found.</option>{% endif %}
+                            {% if similarity_data.available_politicians %}{% for pol in similarity_data.available_politicians %}<option value="{{ pol.politician_id }}" {% if pol.politician_id in similarity_data.selected_politician_ids %}selected{% endif %}>{{ pol.politician_name }}</option>{% endfor %}{% else %}<option disabled>No politicians found.</option>{% endif %}
                         </select>
                         <small class="form-text-hint">Hold Ctrl/Cmd to select multiple. Default selection is top 5 by total votes.</small>
                     </div>
