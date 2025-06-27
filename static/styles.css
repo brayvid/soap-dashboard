@@ -82,6 +82,9 @@ body {
 }
 .footer-link { color: #70c1b3; } /* This color is unique, can also be a variable if needed */
 
+.footer p {
+  font-size: 0.6em;
+}
 /* --- Navigation Tabs --- */
 .dashboard-tabs { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; padding: 0 10px; box-sizing: border-box; flex-wrap: nowrap; }
 .tab-link { padding: 10px 15px; text-decoration: none; color: var(--text-primary); background-color: #f0f0f0; border-radius: 5px; transition: background-color 0.2s ease; white-space: nowrap; text-align: center; flex-shrink: 0; }
