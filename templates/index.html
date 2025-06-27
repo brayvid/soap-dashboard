@@ -21,48 +21,54 @@
     </nav>
     <hr style="margin-bottom: 20px;">
 
-    {# --- SENTIMENT TAB CONTENT --- #}
+    {# The entire set of tabs is one big if/elif/endif block #}
+
+    {# --- START: FINAL CORRECTED SENTIMENT TAB CONTENT --- #}
     {% if active_tab == 'sentiment' %}
-        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
-            <section id="sentiment-ratings-content">
-                <h2>Sentiment Distribution</h2>
-                <p>Shows the percentage of submissions with positive, negative, or neutral word sentiment.</p>
-
-                {# Form directly in tab-content-container, or use .controls-container if you want a distinct box #}
-                <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
-                    <input type="hidden" name="tab" value="sentiment">
-                    <div class="slider-container form-group" style="margin-bottom: 1rem;">
-                        <div>
-                            <label for="min_votes_slider_sentiment" class="form-label" style="margin-right: 5px; display: inline;">Minimum submissions:</label>
-                            <span id="slider_value_sentiment" class="slider-current-value" style="font-weight: bold;">{{ sentiment_data.min_votes_current }}</span>
+    <div class="tab-content-container"> 
+        <section id="sentiment-detail-content">
+            <h2>Sentiment Distribution</h2>
+            <p>Shows the distribution of word sentiments for each politician.</p>
+            
+            <div class="row mb-3"> {# This row will contain the full-width slider and its button #}
+                <div class="col-12"> {# This column makes the card full width #}
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <form method="GET" action="{{ url_for('dashboard') }}"> {# No more flex on the form itself, let Bootstrap handle layout #}
+                                <input type="hidden" name="tab" value="sentiment">
+                                <div class="mb-3"> {# Standard Bootstrap margin-bottom for spacing #}
+                                    <label for="min_votes_slider_sentiment" class="form-label">Minimum submissions:</label>
+                                    <span id="slider_value_sentiment" class="slider-current-value" style="font-weight: bold;">{{ sentiment_data.min_votes_current }}</span>
+                                    <input type="range" class="form-range" id="min_votes_slider_sentiment" name="min_votes_sentiment"
+                                        min="1" max="100" value="{{ sentiment_data.min_votes_current }}" step="1"
+                                        oninput="updateSliderValue('min_votes_slider_sentiment', 'slider_value_sentiment')"
+                                        onchange="this.form.submit()">
+                                </div>
+                            </form>
                         </div>
-                        <input type="range" class="form-range-slider" id="min_votes_slider_sentiment" name="min_votes_sentiment"
-                            min="1" max="100" value="{{ sentiment_data.min_votes_current }}" step="1"
-                            oninput="updateSliderValue('min_votes_slider_sentiment', 'slider_value_sentiment')"
-                            onchange="this.form.submit()">
                     </div>
-                </form>
+                </div>
+            </div>
 
-                {% if sentiment_data.dist_img_base64 %}
-                    <div class="plot-container"><img src="data:image/png;base64,{{ sentiment_data.dist_img_base64 }}" alt="Sentiment Distribution Chart" style="max-width: 100%; height: auto;"></div>
-                {% elif sentiment_data.min_votes_current %}
-                    <div class="info-message">No politicians meet threshold of {{ sentiment_data.min_votes_current }} scorable votes.</div>
-                {% else %}
-                     <div class="info-message">Adjust the slider to view data.</div>
-                {% endif %}
-                <details class="data-expander">
-                    <summary>View Sentiment Distribution Data</summary>
-                    {% if sentiment_data.df_sentiment_dist is not none and not sentiment_data.df_sentiment_dist.empty %}
-                        <div class="table-scroll-wrapper">
-                            {{ sentiment_data.df_sentiment_dist[['politician_name', 'positive_percent', 'neutral_percent', 'negative_percent', 'total_votes']].to_html(classes='styled-table data-table', index=False, formatters={'positive_percent': '{:.1f}%'.format, 'neutral_percent': '{:.1f}%'.format, 'negative_percent': '{:.1f}%'.format}) | safe }}
+            <div class="row"> {# New row for the histogram image #}
+                <div class="col-12"> {# Make this column span the full width #}
+                    {% if sentiment_data.histogram_img_base64 %}
+                        <div class="plot-container">
+                            <p style="text-align: center; font-style: italic;">Displaying histograms for {{ sentiment_data.politician_count }} politician(s) meeting the threshold.</p>
+                            <img src="data:image/png;base64,{{ sentiment_data.histogram_img_base64 }}"
+                                 alt="Detailed Sentiment Distribution Chart"
+                                 style="max-width: 100%; height: auto;">
                         </div>
-                    {% else %}<p class="text-muted">No data to display.</p>{% endif %}
-                </details>
-            </section>
-        </div> {# END .tab-content-container #}
-    {# --- APPROVAL TAB CONTENT --- #}
+                    {% else %}
+                        <div class="info-message">No politicians meet the threshold of {{ sentiment_data.min_votes_current }} submissions. Try lowering the slider.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    </div>
+
     {% elif active_tab == 'approval' %}
-        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+        <div class="tab-content-container">
             <section id="weekly-approval-content">
                 <h2>Weekly Approval Rating</h2>
                 <details class="data-expander" style="margin-bottom: 1.5rem; background-color: #f9f9f9; padding: 10px 15px; border-radius: 5px; border: 1px solid #eee;">
@@ -77,7 +83,6 @@
                     </div>
                 </details>
 
-                {# Form directly in tab-content-container #}
                 <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
                     <input type="hidden" name="tab" value="approval">
                     <div class="form-group" style="margin-bottom: 1rem;">
@@ -113,15 +118,14 @@
                     {% else %}<p class="text-muted">No data to display.</p>{% endif %}
                 </details>
             </section>
-        </div> {# END .tab-content-container #}
-    {# --- TOP WORD TAB CONTENT --- #}
+        </div>
+
     {% elif active_tab == 'top_word' %}
-        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+        <div class="tab-content-container">
             <section id="top-word-content">
                 <h2>Top Weekly Word</h2>
                 <p>Shows the most frequently used word for the selected politician each week.</p>
 
-                {# Form directly in tab-content-container #}
                 <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
                     <input type="hidden" name="tab" value="top_word">
                     <div class="form-group" style="margin-bottom: 1rem;">
@@ -139,7 +143,7 @@
                 {% endif %}
                 {% if top_word_data.top_words_list %}
                     <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 600px;">
-                        <table class="styled-table data-table top-word-data-table"> {# Ensure CSS has rules for this class #}
+                        <table class="styled-table data-table top-word-data-table">
                             <thead><tr><th>Week (YYYY-IW)</th><th style="white-space: nowrap;">Week Start Date</th><th>Top Word Used</th><th style="text-align: right;">Votes for Top Word</th><th style="text-align: right;">Total Votes This Week</th></tr></thead>
                             <tbody>{% for row in top_word_data.top_words_list %}<tr><td>{{ row['Week (YYYY-IW)'] }}</td><td style="white-space: nowrap;">{{ row['Week Start Date'] }}</td><td>{{ row['Top Word Used'] }}</td><td style="text-align: right;">{{ row['Votes for Top Word'] }}</td><td style="text-align: right;">{{ row['Total Votes This Week'] }}</td></tr>{% endfor %}</tbody>
                         </table>
@@ -148,15 +152,14 @@
                 {% elif top_word_data.all_politicians is not none and not top_word_data.all_politicians.empty %}<div class="info-message">ℹ️ Select a politician above. Default is Donald Trump.</div>
                 {% else %}<div class="info-message">Politician data unavailable.</div>{% endif %}
             </section>
-        </div> {# END .tab-content-container #}
-    {# --- SIMILARITY TAB CONTENT --- #}
+        </div>
+
     {% elif active_tab == 'similarity' %}
-        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+        <div class="tab-content-container">
             <section id="semantic-similarity-content">
                 <h2>Semantic Word Similarity</h2>
                 <p>Compare politicians pairwise based on the definitions of words used to describe them. A score closer to 1 indicates that the two collections are more similar in meaning.</p>
 
-                {# Form directly in tab-content-container #}
                 <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
                     <input type="hidden" name="tab" value="similarity">
                     <div class="form-group" style="margin-bottom: 1rem;">
@@ -170,17 +173,14 @@
                     <button type="submit" class="button-primary">Generate Heatmap</button>
                 </form>
 
-                {# Display error message if one exists #}
                 {% if similarity_data.error_message %}
                     <div class="error-message">{{ similarity_data.error_message }}</div>
                 {% endif %}
 
-                {# Display heatmap if it exists and there's no overriding error #}
                 {% if similarity_data.heatmap_img_base64 and not similarity_data.error_message %}
                     <div class="plot-container">
                         <img src="data:image/png;base64,{{ similarity_data.heatmap_img_base64 }}" alt="Semantic Similarity Heatmap" style="max-width: 100%; height: auto;">
                     </div>
-                {# If no image and no error, show generic info message #}
                 {% elif not similarity_data.error_message %}
                     <div class="info-message">
                         {% if similarity_data.available_politicians %}
@@ -191,9 +191,7 @@
                     </div>
                 {% endif %}
                 
-                {# Display warning messages about the display limit #}
                 {% if similarity_data.df_for_similarity_calc is not none and not similarity_data.df_for_similarity_calc.empty and similarity_data.df_for_similarity_calc|length >= similarity_data.MAX_HEATMAP_POLITICIANS and 'All' in request.args.get('politician_select_mode_similarity', '') %}
-                    <!--Do Nothing -->
                 {% elif similarity_data.selected_politician_ids and not ('All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.selected_politician_ids|length > similarity_data.MAX_HEATMAP_POLITICIANS %}
                     <div class="warning-message">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>
                 {% endif %}
@@ -207,17 +205,16 @@
                     {% endif %}
                 </details>
             </section>
-        </div> {# END .tab-content-container #}
+        </div>
         
-    {# --- START: MODIFIED OVERVIEW TAB CONTENT --- #}
     {% elif active_tab == 'overview' %}
-        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+        <div class="tab-content-container">
             <section id="overview-metrics-content">
                 <h2>Dataset Overview</h2>
                 <p>Basic statistics about the underlying dataset.</p>
                 {% if overview_data and overview_data.metrics %}
                     <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 700px; margin-left: auto; margin-right: auto;">
-                        <ul style="list-style-type: none; padding-left: 0;"> {# This is the original structure #}
+                        <ul style="list-style-type: none; padding-left: 0;">
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
                                 <strong>Total Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_votes }}</span>
                             </li>
@@ -265,12 +262,10 @@
                     <p class="text-muted">Could not retrieve overview metrics at this time.</p>
                 {% endif %}
             </section>
-        </div> {# END .tab-content-container #}
-    {# --- END: MODIFIED OVERVIEW TAB CONTENT --- #}
+        </div>
 
-    {# --- FEED TAB CONTENT --- #}
     {% elif active_tab == 'feed' %}
-        <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
+        <div class="tab-content-container">
              <section id="feed-content">
                 <h2>Activity Feed</h2>
                 <p>Shows submissions recorded from <strong>{{ feed_data.feed_display_period_start }}</strong> to <strong>{{ feed_data.feed_display_period_end }}</strong>, along with the sentiment score of the word used.</p>
@@ -304,7 +299,7 @@
                     <p class="text-muted">No activity recorded for the period {{ feed_data.feed_display_period_start }} to {{ feed_data.feed_display_period_end }}, or an error occurred.</p>
                 {% endif %}
             </section>
-        </div> {# END .tab-content-container #}
+        </div>
     {% endif %}
 {% endblock %}
 
@@ -321,6 +316,7 @@ function updateSliderValue(sliderId, outputId) {
 document.addEventListener('DOMContentLoaded', function() {
     const sentimentSlider = document.getElementById('min_votes_slider_sentiment');
     const sentimentOutput = document.getElementById('slider_value_sentiment');
+    // Ensure the slider value is updated on initial load
     if (sentimentSlider && sentimentOutput) {
         sentimentOutput.innerHTML = sentimentSlider.value;
     }
