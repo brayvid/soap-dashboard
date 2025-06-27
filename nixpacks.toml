@@ -1,4 +1,5 @@
 # nixpacks.toml
 
+# This version completely overrides the default Nix packages.
 [phases.setup]
-nixPkgs = ["...", "python39", "gcc", "postgresql_16"]
+nixPkgs = ["gcc", "python39", "postgresql_16"]
