@@ -193,7 +193,7 @@
                 
                 {# Display warning messages about the display limit #}
                 {% if similarity_data.df_for_similarity_calc is not none and not similarity_data.df_for_similarity_calc.empty and similarity_data.df_for_similarity_calc|length >= similarity_data.MAX_HEATMAP_POLITICIANS and 'All' in request.args.get('politician_select_mode_similarity', '') %}
-                    <div class="warning-message">Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} politicians by total votes.</div>
+                    <!-- Nothing -->
                 {% elif similarity_data.selected_politician_ids and not ('All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.selected_politician_ids|length > similarity_data.MAX_HEATMAP_POLITICIANS %}
                     <div class="warning-message">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>
                 {% endif %}

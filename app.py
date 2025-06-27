@@ -23,19 +23,16 @@ app = Flask(__name__)
 
 # --- SpaCy Model Loading ---
 # This model is required for the semantic similarity calculation.
-# A medium model provides a good balance of vector quality and size.
-# The user must run: python -m spacy download en_core_web_md
+# It will be installed via requirements.txt, so we can load by name.
 try:
     nlp = spacy.load('en_core_web_md')
     SPACY_MODEL_LOADED = True
     app.logger.info("Successfully loaded spaCy model 'en_core_web_md'.")
 except OSError:
-    app.logger.warning("spaCy model 'en_core_web_md' not found.")
-    app.logger.warning("Please run 'python -m spacy download en_core_web_md'.")
-    app.logger.warning("Semantic similarity tab will be disabled.")
+    app.logger.error("spaCy model 'en_core_web_md' not found.")
+    app.logger.error("This should have been installed via requirements.txt. Check the build logs.")
     nlp = None
     SPACY_MODEL_LOADED = False
-
 
 # --- Database Connection ---
 DEPLOY_ENV = os.environ.get('DEPLOY_ENV', 'DEVELOPMENT').upper()
