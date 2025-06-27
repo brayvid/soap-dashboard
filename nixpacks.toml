@@ -1,0 +1,4 @@
+# nixpacks.toml
+
+[phases.setup]
+nixPkgs = ["...", "python39", "gcc", "postgresql_16"]
