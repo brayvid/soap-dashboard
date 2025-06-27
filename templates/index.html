@@ -149,12 +149,12 @@
                 {% else %}<div class="info-message">Politician data unavailable.</div>{% endif %}
             </section>
         </div> {# END .tab-content-container #}
-    {# --- SIMILARITY TAB CONTENT --- #}
+    {# --- SIMILARITY TAB CONTENT (CORRECTED) --- #}
     {% elif active_tab == 'similarity' %}
         <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
-            <section id="valence-similarity-content">
-                <h2>Sentiment Similarity Matrix</h2>
-                <p>Heatmap shows similarity based on sentiment profiles. Score closer to 1 indicates more similar profiles.</p>
+            <section id="semantic-similarity-content">
+                <h2>Semantic Word Similarity</h2>
+                <p>Compares politicians based on the semantic meaning of words used to describe them. A score closer to 1 indicates that the collections of words used for two politicians are more similar in meaning.</p>
 
                 {# Form directly in tab-content-container #}
                 <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
@@ -170,16 +170,41 @@
                     <button type="submit" class="button-primary">Generate Heatmap</button>
                 </form>
 
-                {% if similarity_data.heatmap_img_base64 %}<div class="plot-container"><img src="data:image/png;base64,{{ similarity_data.heatmap_img_base64 }}" alt="Valence Similarity Heatmap" style="max-width: 100%; height: auto;"></div>
-                {% elif (similarity_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.df_for_similarity_calc is not none and similarity_data.df_for_similarity_calc|length <= 1 %}<div class="info-message">Need at least two politicians for similarity analysis.</div>
-                {% elif similarity_data.available_politicians %}<div class="info-message">ℹ️ Select politician(s) above. Default selection is top 5 by total votes.</div>
-                {% else %}<div class="info-message">No politicians available for similarity analysis.</div>{% endif %}
-                {% if similarity_data.df_for_similarity_calc is not none and not similarity_data.df_for_similarity_calc.empty and similarity_data.df_for_similarity_calc|length >= similarity_data.MAX_HEATMAP_POLITICIANS and 'All' in request.args.get('politician_select_mode_similarity', '') %}<div class="warning-message">Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} politicians by total votes.</div>
-                {% elif similarity_data.selected_politician_ids and not ('All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.selected_politician_ids|length > similarity_data.MAX_HEATMAP_POLITICIANS %}<div class="warning-message">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>{% endif %}
-                <details class="data-expander"><summary>View Similarity Matrix Data</summary>
-                    {% if similarity_data.similarity_df_html %}<div class="table-scroll-wrapper">{{ similarity_data.similarity_df_html | safe }}</div>
-                    {% elif similarity_data.selected_politician_ids or 'All' in request.args.get('politician_select_mode_similarity', '') %}<p class="text-muted">Not enough data or politicians to generate matrix from current selection.</p>
-                    {% else %}<p class="text-muted">No data to display.</p>{% endif %}
+                {# Display error message if one exists #}
+                {% if similarity_data.error_message %}
+                    <div class="error-message">{{ similarity_data.error_message }}</div>
+                {% endif %}
+
+                {# Display heatmap if it exists and there's no overriding error #}
+                {% if similarity_data.heatmap_img_base64 and not similarity_data.error_message %}
+                    <div class="plot-container">
+                        <img src="data:image/png;base64,{{ similarity_data.heatmap_img_base64 }}" alt="Semantic Similarity Heatmap" style="max-width: 100%; height: auto;">
+                    </div>
+                {# If no image and no error, show generic info message #}
+                {% elif not similarity_data.error_message %}
+                    <div class="info-message">
+                        {% if similarity_data.available_politicians %}
+                            ℹ️ Select politician(s) and click 'Generate Heatmap'.
+                        {% else %}
+                            No politicians available for similarity analysis.
+                        {% endif %}
+                    </div>
+                {% endif %}
+                
+                {# Display warning messages about the display limit #}
+                {% if similarity_data.df_for_similarity_calc is not none and not similarity_data.df_for_similarity_calc.empty and similarity_data.df_for_similarity_calc|length >= similarity_data.MAX_HEATMAP_POLITICIANS and 'All' in request.args.get('politician_select_mode_similarity', '') %}
+                    <div class="warning-message">Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} politicians by total votes.</div>
+                {% elif similarity_data.selected_politician_ids and not ('All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.selected_politician_ids|length > similarity_data.MAX_HEATMAP_POLITICIANS %}
+                    <div class="warning-message">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>
+                {% endif %}
+                
+                <details class="data-expander">
+                    <summary>View Similarity Matrix Data</summary>
+                    {% if similarity_data.similarity_df_html %}
+                        <div class="table-scroll-wrapper">{{ similarity_data.similarity_df_html | safe }}</div>
+                    {% else %}
+                        <p class="text-muted">No data matrix to display. Generate a heatmap first.</p>
+                    {% endif %}
                 </details>
             </section>
         </div> {# END .tab-content-container #}

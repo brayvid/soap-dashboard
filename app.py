@@ -17,11 +17,27 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import base64
 import datetime
+import spacy # Added for semantic similarity
 
 app = Flask(__name__)
 
+# --- SpaCy Model Loading ---
+# This model is required for the semantic similarity calculation.
+# A medium model provides a good balance of vector quality and size.
+# The user must run: python -m spacy download en_core_web_md
+try:
+    nlp = spacy.load('en_core_web_md')
+    SPACY_MODEL_LOADED = True
+    app.logger.info("Successfully loaded spaCy model 'en_core_web_md'.")
+except OSError:
+    app.logger.warning("spaCy model 'en_core_web_md' not found.")
+    app.logger.warning("Please run 'python -m spacy download en_core_web_md'.")
+    app.logger.warning("Semantic similarity tab will be disabled.")
+    nlp = None
+    SPACY_MODEL_LOADED = False
+
+
 # --- Database Connection ---
-# ... (This section is correct and does not need changes) ...
 DEPLOY_ENV = os.environ.get('DEPLOY_ENV', 'DEVELOPMENT').upper()
 def get_env_var(var_name_prefix, key):
     var_to_check = f"{var_name_prefix}_{key.upper()}"
@@ -58,7 +74,6 @@ engine = get_engine()
 
 
 # --- Data Fetching Functions ---
-# ... (These are correct and do not need changes) ...
 def fetch_politicians_list(_engine):
     if not _engine: return pd.DataFrame({'politician_id': [], 'name': []})
     query = text("SELECT politician_id, name FROM politicians ORDER BY name ASC;")
@@ -119,6 +134,47 @@ def fetch_sentiment_distribution_per_politician(_engine, min_total_votes_thresho
     except Exception as e:
         app.logger.error(f"Error in fetch_sentiment_distribution_per_politician: {e}\nQuery was: {query_with_final_order_by}")
         return pd.DataFrame()
+
+def fetch_word_counts_per_politician(_engine, politician_ids_list=None):
+    """
+    Fetches the raw word counts for each politician for semantic analysis.
+    If politician_ids_list is provided, it filters for those politicians.
+    """
+    df_cols = ["politician_id", "politician_name", "word", "count"]
+    if not _engine: return pd.DataFrame(columns=df_cols)
+
+    where_clause = ""
+    params = {}
+    if politician_ids_list:
+        try:
+            safe_politician_ids = tuple(map(int, politician_ids_list))
+            if safe_politician_ids:
+                where_clause = "WHERE p.politician_id IN :p_ids"
+                params['p_ids'] = safe_politician_ids
+        except (ValueError, TypeError):
+            app.logger.error(f"Invalid politician IDs provided for word count fetch: {politician_ids_list}")
+            return pd.DataFrame(columns=df_cols)
+    
+    query = text(f"""
+        SELECT
+            p.politician_id,
+            p.name AS politician_name,
+            w.word,
+            COUNT(v.vote_id) AS "count"
+        FROM votes v
+        JOIN politicians p ON v.politician_id = p.politician_id
+        JOIN words w ON v.word_id = w.word_id
+        {where_clause}
+        GROUP BY p.politician_id, p.name, w.word
+        ORDER BY p.politician_id, "count" DESC;
+    """)
+    try:
+        with _engine.connect() as connection:
+            df = pd.read_sql(query, connection, params=params)
+        return df
+    except Exception as e:
+        app.logger.error(f"Error fetching word counts: {e}")
+        return pd.DataFrame(columns=df_cols)
 
 def fetch_weekly_approval_rating(_engine, politician_ids_list):
     if not _engine or not politician_ids_list: return pd.DataFrame()
@@ -313,7 +369,7 @@ def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, yl
     img_buf = BytesIO(); fig.savefig(img_buf, format="png", bbox_inches='tight', dpi=100); img_buf.seek(0)
     plt.close(fig); return img_buf
 
-def plot_similarity_heatmap_to_image(similarity_matrix_df, title="Sentiment Similarity Matrix"):
+def plot_similarity_heatmap_to_image(similarity_matrix_df, title="Similarity Matrix", cbar_label="Cosine Similarity"):
     if similarity_matrix_df.empty or len(similarity_matrix_df) < 2: return None
     plot_df = similarity_matrix_df.copy()
     display_n = len(plot_df)
@@ -324,7 +380,7 @@ def plot_similarity_heatmap_to_image(similarity_matrix_df, title="Sentiment Simi
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     sns.heatmap(plot_df, annot=True, fmt=".2f", cmap="viridis", linewidths=.5, ax=ax,
                 cbar=True, square=True, annot_kws={"size": 6 if display_n > 20 else (7 if display_n > 15 else 8)},
-                cbar_kws={'label': 'Cosine Similarity of Sentiment Distribution', 'shrink': 0.7})
+                cbar_kws={'label': cbar_label, 'shrink': 0.7})
     ax.set_title(title, fontsize=16, pad=20, weight='bold')
     ax.tick_params(axis='x', rotation=70, labelsize=9)
     ax.tick_params(axis='y', rotation=0, labelsize=8)
@@ -380,7 +436,6 @@ def dashboard():
         sentiment_tab_data = {'min_votes_current': min_votes, 'df_sentiment_dist': df_sentiment_dist, 'dist_img_base64': dist_img_base64}
 
     elif active_tab == 'approval':
-        # ... (approval tab logic is correct and does not need changes) ...
         selected_politician_ids_str = request.args.getlist('politician_ids_approval')
         selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
         if not selected_politician_ids_str and not politicians_list_df.empty:
@@ -411,7 +466,6 @@ def dashboard():
         approval_tab_data = {'all_politicians': politicians_list_df, 'selected_politician_ids': selected_politician_ids, 'selected_politician_names': selected_politician_names, 'df_display_ready': df_display_ready, 'weekly_approval_img_base64': weekly_approval_img_base64}
 
     elif active_tab == 'top_word':
-        # ... (top_word tab logic is correct and does not need changes) ...
         selected_pid_top_word_str = request.args.get('politician_id_top_word')
         selected_pid_top_word = None
         if selected_pid_top_word_str and selected_pid_top_word_str.isdigit():
@@ -439,69 +493,91 @@ def dashboard():
         top_word_tab_data = {'all_politicians': politicians_list_df, 'selected_politician_id': selected_pid_top_word, 'selected_politician_name': selected_politician_name_top_word, 'top_words_list': top_words_list_for_template}
 
     elif active_tab == 'similarity':
-        # === START: UPDATED SIMILARITY TAB LOGIC ===
+        # === START: CORRECTED SEMANTIC SIMILARITY LOGIC ===
         MAX_HEATMAP_POLITICIANS_CONST = 30
         
-        # Fetch all politicians with at least one vote for populating the form
-        df_all_for_selection = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=False)
-        
-        available_politicians_for_similarity = []
-        if not df_all_for_selection.empty:
-            # Sort this list alphabetically by name for the form dropdown
-            df_form_list = df_all_for_selection.sort_values('politician_name', ascending=True)
-            available_politicians_for_similarity = df_form_list[['politician_id', 'politician_name']].to_dict(orient='records')
-            # The 'total_votes' is removed from this dict as it's not needed for the display text
-            
-        selected_politician_ids_str = request.args.getlist('politician_ids_similarity')
-        selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
-        
-        # Default selection logic
-        if not selected_politician_ids_str and not df_all_for_selection.empty:
-            # Default to the top 5 by total votes
-            default_selection_df = df_all_for_selection.sort_values('total_votes', ascending=False)
-            selected_politician_ids = default_selection_df['politician_id'].head(min(5, len(default_selection_df))).tolist()
-
-        # Determine which IDs to actually use for the calculation
-        if "All" in request.args.get('politician_select_mode_similarity', '') and not df_all_for_selection.empty:
-            ids_for_heatmap_calc = df_all_for_selection['politician_id'].tolist()
-        else:
-            ids_for_heatmap_calc = selected_politician_ids
-
-        heatmap_img_base64 = None
-        similarity_df_valence_html = None
-        df_for_similarity_calc = pd.DataFrame()
-        if ids_for_heatmap_calc and not df_all_for_selection.empty:
-            df_selected_full = df_all_for_selection[df_all_for_selection['politician_id'].isin(ids_for_heatmap_calc)]
-            # Sort the data for the heatmap by total votes, so the most prominent are at the top
-            df_for_similarity_calc = df_selected_full.sort_values('total_votes', ascending=False).head(MAX_HEATMAP_POLITICIANS_CONST).copy()
-
-            if not df_for_similarity_calc.empty and len(df_for_similarity_calc) > 1:
-                names = df_for_similarity_calc['politician_name'].tolist()
-                vectors = df_for_similarity_calc[['positive_percent', 'neutral_percent', 'negative_percent']].values
-                if vectors.ndim == 2 and vectors.shape[0] > 1:
-                    sim_matrix = cosine_similarity(vectors)
-                    sim_df = pd.DataFrame(sim_matrix, index=names, columns=names)
-                    heatmap_buf = plot_similarity_heatmap_to_image(sim_df, title="Sentiment Similarity Matrix")
-                    heatmap_img_base64 = get_image_as_base64(heatmap_buf)
-                    similarity_df_valence_html = sim_df.style.format("{:.3f}").to_html(classes='styled-table', border=0)
-        
+        # Initialize the dictionary with all keys the template expects
         similarity_data_dict = {
-            'available_politicians': available_politicians_for_similarity, 
-            'selected_politician_ids': selected_politician_ids, 
-            'df_for_similarity_calc': df_for_similarity_calc, 
-            'heatmap_img_base64': heatmap_img_base64, 
-            'similarity_df_html': similarity_df_valence_html, 
-            'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST
+            'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST,
+            'available_politicians': [],
+            'selected_politician_ids': [],
+            'heatmap_img_base64': None,
+            'similarity_df_html': None,
+            'error_message': None,
+            'df_for_similarity_calc': pd.DataFrame() # Add this empty dataframe for the template
         }
-        # === END: UPDATED SIMILARITY TAB LOGIC ===
+        
+        if not SPACY_MODEL_LOADED:
+            similarity_data_dict['error_message'] = "Semantic similarity calculation is disabled because the required spaCy language model ('en_core_web_md') is not installed. Please ask the administrator to install it by running: python -m spacy download en_core_web_md"
+        else:
+            df_all_for_selection = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
+            
+            if not df_all_for_selection.empty:
+                df_form_list = df_all_for_selection.sort_values('politician_name', ascending=True)
+                similarity_data_dict['available_politicians'] = df_form_list[['politician_id', 'politician_name']].to_dict(orient='records')
 
+            selected_politician_ids_str = request.args.getlist('politician_ids_similarity')
+            selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
+            
+            if not selected_politician_ids_str and not df_all_for_selection.empty:
+                selected_politician_ids = df_all_for_selection['politician_id'].head(min(5, len(df_all_for_selection))).tolist()
+            
+            if "All" in request.args.get('politician_select_mode_similarity', '') and not df_all_for_selection.empty:
+                ids_for_calc = df_all_for_selection['politician_id'].head(MAX_HEATMAP_POLITICIANS_CONST).tolist()
+            else:
+                ids_for_calc = selected_politician_ids
+            similarity_data_dict['selected_politician_ids'] = selected_politician_ids
+
+            if ids_for_calc:
+                df_word_counts = fetch_word_counts_per_politician(engine, politician_ids_list=ids_for_calc)
+                
+                if not df_word_counts.empty and 'politician_name' in df_word_counts.columns:
+                    politician_docs = {name: dict(zip(group['word'], group['count'])) for name, group in df_word_counts.groupby('politician_name')}
+                    
+                    politician_vectors = {}
+                    vector_dim = nlp.vocab.vectors.shape[1]
+                    for name, word_counts in politician_docs.items():
+                        doc_vector = np.zeros(vector_dim, dtype='float32')
+                        total_weight = 0
+                        for word, count in word_counts.items():
+                            token = nlp.vocab[word.lower()]
+                            if token.has_vector and token.is_alpha and not token.is_stop:
+                                doc_vector += token.vector * count
+                                total_weight += count
+                        if total_weight > 0:
+                            politician_vectors[name] = doc_vector / total_weight
+
+                    valid_politicians = list(politician_vectors.keys())
+                    if len(valid_politicians) > 1:
+                        names_for_matrix = valid_politicians
+                        vectors_for_matrix = np.array([politician_vectors[name] for name in names_for_matrix])
+                        
+                        sim_matrix = cosine_similarity(vectors_for_matrix)
+                        sim_df = pd.DataFrame(sim_matrix, index=names_for_matrix, columns=names_for_matrix)
+                        
+                        original_name_order = df_all_for_selection[df_all_for_selection['politician_id'].isin(ids_for_calc)]['politician_name'].tolist()
+                        ordered_names_in_matrix = [name for name in original_name_order if name in sim_df.index]
+                        if ordered_names_in_matrix:
+                             sim_df = sim_df.reindex(index=ordered_names_in_matrix, columns=ordered_names_in_matrix)
+                        
+                        heatmap_buf = plot_similarity_heatmap_to_image(sim_df, title="Semantic Similarity Heatmap", cbar_label="Cosine Similarity of Word Collections (0-1)")
+                        similarity_data_dict['heatmap_img_base64'] = get_image_as_base64(heatmap_buf)
+                        similarity_data_dict['similarity_df_html'] = sim_df.style.format("{:.3f}").to_html(classes='styled-table', border=0)
+                        # CRITICAL FIX: Add the dataframe for the template's 'if' check
+                        similarity_data_dict['df_for_similarity_calc'] = sim_df
+                    else:
+                        similarity_data_dict['error_message'] = "Could not generate meaningful semantic profiles for more than one selected politician. Please select different or more politicians, or ones with more associated words."
+                else:
+                    similarity_data_dict['error_message'] = "No word data found for the selected politician(s)."
+            else:
+                if not similarity_data_dict.get('error_message'):
+                     similarity_data_dict['error_message'] = "No politicians selected for similarity analysis."
+        # === END: CORRECTED SEMANTIC SIMILARITY LOGIC ===
     elif active_tab == 'overview':
-        # ... (overview tab logic is correct and does not need changes) ...
         metrics = fetch_dataset_metrics(engine)
         overview_tab_data = {'metrics': metrics}
 
     elif active_tab == 'feed':
-        # ... (feed tab logic is correct and does not need changes) ...
         today = datetime.date.today()
         query_end_date = today
         query_start_date = today - datetime.timedelta(days=6)
@@ -538,7 +614,6 @@ def dashboard():
                            engine_available=bool(engine))
 
 # --- Favicon & 404 Routes ---
-# ... (These are correct and do not need changes) ...
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
@@ -548,7 +623,6 @@ def page_not_found(e):
     return render_template('404.html'), 404
 
 # --- Main Entry Point ---
-# ... (This is correct and does not need changes) ...
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
     if not debug_mode and DEPLOY_ENV == 'DEVELOPMENT':

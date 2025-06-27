@@ -6,4 +6,5 @@ matplotlib
 seaborn
 scikit-learn
 gunicorn         
-python-dotenv   
+python-dotenv
+spacy
