@@ -149,7 +149,7 @@
                 {% else %}<div class="info-message">Politician data unavailable.</div>{% endif %}
             </section>
         </div> {# END .tab-content-container #}
-    {# --- SIMILARITY TAB CONTENT (CORRECTED) --- #}
+    {# --- SIMILARITY TAB CONTENT --- #}
     {% elif active_tab == 'similarity' %}
         <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
             <section id="semantic-similarity-content">
@@ -193,7 +193,7 @@
                 
                 {# Display warning messages about the display limit #}
                 {% if similarity_data.df_for_similarity_calc is not none and not similarity_data.df_for_similarity_calc.empty and similarity_data.df_for_similarity_calc|length >= similarity_data.MAX_HEATMAP_POLITICIANS and 'All' in request.args.get('politician_select_mode_similarity', '') %}
-                    <!-- Nothing -->
+                    <!--Do Nothing -->
                 {% elif similarity_data.selected_politician_ids and not ('All' in request.args.get('politician_select_mode_similarity', '')) and similarity_data.selected_politician_ids|length > similarity_data.MAX_HEATMAP_POLITICIANS %}
                     <div class="warning-message">You selected {{ similarity_data.selected_politician_ids|length }} politicians. Displaying heatmap for top {{ similarity_data.MAX_HEATMAP_POLITICIANS }} of your selection by total votes.</div>
                 {% endif %}
@@ -208,32 +208,51 @@
                 </details>
             </section>
         </div> {# END .tab-content-container #}
-    {# --- OVERVIEW TAB CONTENT (Formerly DATASET) --- #}
+        
+    {# --- START: MODIFIED OVERVIEW TAB CONTENT --- #}
     {% elif active_tab == 'overview' %}
         <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}
             <section id="overview-metrics-content">
                 <h2>Dataset Overview</h2>
                 <p>Basic statistics about the underlying dataset.</p>
                 {% if overview_data and overview_data.metrics %}
-                    <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; margin-left: auto; margin-right: auto;">
-                        <ul style="list-style-type: none; padding-left: 0;">
-                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Politicians:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_politicians }}</span>
-                            </li>
-                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Unique Words:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_words_scorable }}</span>
-                            </li>
+                    <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 700px; margin-left: auto; margin-right: auto;">
+                        <ul style="list-style-type: none; padding-left: 0;"> {# This is the original structure #}
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
                                 <strong>Total Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_votes }}</span>
                             </li>
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Net Sentiment:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.net_sentiment_sum_all_submissions }}</span>
+                                <strong>Politicians Profiled:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_politicians }}</span>
                             </li>
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Net Sentiment/Submission:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.average_sentiment_score_all_submissions }}</span>
+                                <strong>Unique Words:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_words_scorable }}</span>
                             </li>
                              <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
                                 <strong>Overall Approval Rating:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.net_approval_rating_percent_all_submissions }}</span>
+                            </li>
+                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Avg. Sentiment / Submission (-1 to +1):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.average_sentiment_score_all_submissions }}</span>
+                            </li>
+                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Submission Count (Last 7 Days):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.submissions_last_7_days }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Most Active Day:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_active_day }}</span>
+                            </li>
+                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Most Described:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_described_politician }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Highest-Rated:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.highest_rated_politician }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Lowest-Rated:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.lowest_rated_politician }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Most Positive Word(s):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_positive_word_attribution }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Most Negative Word(s):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_negative_word_attribution }}</span>
                             </li>
                             <li style="font-size: 1.1em; padding: 8px; overflow: hidden;">
                                 <strong>Data Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.votes_date_range }}</span>
@@ -247,6 +266,8 @@
                 {% endif %}
             </section>
         </div> {# END .tab-content-container #}
+    {# --- END: MODIFIED OVERVIEW TAB CONTENT --- #}
+
     {# --- FEED TAB CONTENT --- #}
     {% elif active_tab == 'feed' %}
         <div class="tab-content-container"> {# WRAPPER FOR ALL TAB CONTENT #}

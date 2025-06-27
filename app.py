@@ -205,37 +205,128 @@ def fetch_weekly_approval_rating(_engine, politician_ids_list):
         return pd.DataFrame()
 
 def fetch_dataset_metrics(_engine):
-    metric_keys = ["total_politicians", "total_words_scorable", "total_votes", "votes_date_range", "net_sentiment_sum_all_submissions", "average_sentiment_score_all_submissions", "net_approval_rating_percent_all_submissions"]
+    metric_keys = [
+        "total_politicians", "total_words_scorable", "total_votes", "votes_date_range",
+        "net_sentiment_sum_all_submissions", "average_sentiment_score_all_submissions",
+        "net_approval_rating_percent_all_submissions", "avg_submissions_per_politician",
+        "submissions_last_7_days", "most_active_day", "most_described_politician",
+        "highest_rated_politician", "lowest_rated_politician",
+        "most_positive_word_attribution", "most_negative_word_attribution" # New, more specific keys
+    ]
     if not _engine: return {key: "N/A" for key in metric_keys}
-    metrics = {}
+
+    metrics = {key: "N/A" for key in metric_keys}
+    MIN_VOTES_FOR_RATING = 20 # Threshold for highest/lowest rated politician
+
     try:
         with _engine.connect() as connection:
-            metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or "N/A"
-            metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or "N/A"
-            metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or "N/A"
-            res_dates = connection.execute(text("SELECT MIN(created_at)::date AS min_date, MAX(created_at)::date AS max_date FROM votes;")).fetchone()
-            if res_dates and res_dates.min_date and res_dates.max_date:
-                min_d, max_d = res_dates.min_date, res_dates.max_date
-                metrics["votes_date_range"] = f"{min_d.strftime('%Y-%m-%d')} to {max_d.strftime('%Y-%m-%d')}" if min_d != max_d else f"On {min_d.strftime('%Y-%m-%d')}"
-            else: metrics["votes_date_range"] = "N/A"
-            sentiment_query = text("SELECT SUM(w.sentiment_score) AS total_sentiment_sum, COUNT(v.vote_id) AS scorable_votes_count FROM votes v JOIN words w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL;")
+            # --- Basic & Activity Metrics ---
+            metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or 0
+            metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or 0
+            metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or 0
+            
+            res_dates = connection.execute(text("SELECT MIN(created_at)::date, MAX(created_at)::date FROM votes;")).fetchone()
+            if res_dates and res_dates[0] and res_dates[1]:
+                metrics["votes_date_range"] = f"{res_dates[0].strftime('%Y-%m-%d')} to {res_dates[1].strftime('%Y-%m-%d')}"
+            
+            if metrics["total_votes"] > 0 and metrics["total_politicians"] > 0:
+                metrics["avg_submissions_per_politician"] = f"{(metrics['total_votes'] / metrics['total_politicians']):.1f}"
+
+            try:
+                metrics["submissions_last_7_days"] = f"{connection.execute(text('''SELECT COUNT(*) FROM votes WHERE created_at >= NOW() - INTERVAL '7 days';''')).scalar_one():,}"
+            except Exception as e: app.logger.error(f"Error fetching submissions_last_7_days: {e}")
+
+            # --- Politician & Sentiment Metrics ---
+            sentiment_query = text("SELECT SUM(w.sentiment_score), COUNT(v.vote_id) FROM votes v JOIN words w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL;")
             sentiment_res = connection.execute(sentiment_query).fetchone()
-            if sentiment_res and sentiment_res.scorable_votes_count is not None and sentiment_res.scorable_votes_count > 0:
-                total_sum, count_votes = sentiment_res.total_sentiment_sum, sentiment_res.scorable_votes_count
+            if sentiment_res and sentiment_res[1] and sentiment_res[1] > 0:
+                total_sum, count_votes = sentiment_res[0], sentiment_res[1]
                 metrics["net_sentiment_sum_all_submissions"] = f"{total_sum:.2f}"
                 avg_score = total_sum / count_votes
                 metrics["average_sentiment_score_all_submissions"] = f"{avg_score:.4f}"
                 approval_percent = (((avg_score / 2.0) + 0.5) * 100.0)
                 metrics["net_approval_rating_percent_all_submissions"] = f"{approval_percent:.2f}%"
-            else:
-                for key in ["net_sentiment_sum_all_submissions", "average_sentiment_score_all_submissions", "net_approval_rating_percent_all_submissions"]:
-                    metrics[key] = "N/A"
-        for key in metric_keys:
-            if key not in metrics: metrics[key] = "N/A"
-        return metrics
+            try:
+                res = connection.execute(text("""
+                    WITH r AS (SELECT DATE(created_at) d, COUNT(*) c, RANK() OVER (ORDER BY COUNT(*) DESC) rnk FROM votes GROUP BY d)
+                    SELECT d, c FROM r WHERE rnk = 1;
+                """)).fetchall()
+                if res: metrics["most_active_day"] = ", ".join([f"{d.strftime('%Y-%m-%d')} ({c} submissions)" for d, c in res])
+            except Exception as e: app.logger.error(f"Error fetching most_active_day: {e}")
+            try:
+                res = connection.execute(text("""
+                    WITH r AS (SELECT p.name n, COUNT(v.vote_id) c, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) rnk FROM votes v JOIN politicians p ON v.politician_id = p.politician_id GROUP BY p.name)
+                    SELECT n, c FROM r WHERE rnk = 1;
+                """)).fetchall()
+                if res: metrics["most_described_politician"] = ", ".join([f"{n} ({c} submissions)" for n, c in res])
+            except Exception as e: app.logger.error(f"Error fetching most_described_politician: {e}")
+            try:
+                res = connection.execute(text("""
+                    WITH s AS (SELECT p.name n, (SUM(w.sentiment_score)/COUNT(v.vote_id)) sc, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) DESC) r_hi, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) ASC) r_lo FROM votes v JOIN words w ON v.word_id=w.word_id JOIN politicians p ON v.politician_id=p.politician_id WHERE w.sentiment_score IS NOT NULL GROUP BY p.name HAVING COUNT(v.vote_id) >= :min_votes)
+                    SELECT n, sc, r_hi, r_lo FROM s WHERE r_hi=1 OR r_lo=1;
+                """), {'min_votes': MIN_VOTES_FOR_RATING}).fetchall()
+                if res:
+                    hi_rated = [f"{r.n} ({(((r.sc/2.0)+0.5)*100.0):.1f}%)" for r in res if r.r_hi==1]
+                    lo_rated = [f"{r.n} ({(((r.sc/2.0)+0.5)*100.0):.1f}%)" for r in res if r.r_lo==1]
+                    if hi_rated: metrics["highest_rated_politician"] = ", ".join(hi_rated)
+                    if lo_rated: metrics["lowest_rated_politician"] = ", ".join(lo_rated)
+            except Exception as e: app.logger.error(f"Error fetching politician_ratings: {e}")
+            
+            # --- NEW: Most Extreme Word Attribution ---
+            try:
+                # 1. Find the most extreme words
+                extreme_words_query = text("""
+                    SELECT word, sentiment_score FROM words WHERE sentiment_score = (SELECT MAX(sentiment_score) FROM words)
+                    UNION ALL
+                    SELECT word, sentiment_score FROM words WHERE sentiment_score = (SELECT MIN(sentiment_score) FROM words);
+                """)
+                extreme_words = connection.execute(extreme_words_query).fetchall()
+
+                if extreme_words:
+                    max_score = max(w.sentiment_score for w in extreme_words)
+                    min_score = min(w.sentiment_score for w in extreme_words)
+                    
+                    positive_words = [w.word for w in extreme_words if w.sentiment_score == max_score]
+                    negative_words = [w.word for w in extreme_words if w.sentiment_score == min_score]
+
+                    # 2. For each extreme word, find the top politician associated with it
+                    attribution_query = text("""
+                        WITH AttributionCounts AS (
+                            SELECT p.name, COUNT(v.vote_id) as use_count,
+                            RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) as rnk
+                            FROM votes v
+                            JOIN politicians p ON v.politician_id = p.politician_id
+                            JOIN words w ON v.word_id = w.word_id
+                            WHERE w.word = :word
+                            GROUP BY p.name
+                        )
+                        SELECT name FROM AttributionCounts WHERE rnk = 1 LIMIT 1;
+                    """)
+
+                    pos_attributions = []
+                    for word in positive_words:
+                        top_politician = connection.execute(attribution_query, {'word': word}).scalar_one_or_none()
+                        if top_politician:
+                            pos_attributions.append(f"{top_politician}: {word.capitalize()} ({max_score:+.2f})")
+                    if pos_attributions:
+                        metrics["most_positive_word_attribution"] = ", ".join(pos_attributions)
+
+                    neg_attributions = []
+                    for word in negative_words:
+                        top_politician = connection.execute(attribution_query, {'word': word}).scalar_one_or_none()
+                        if top_politician:
+                            neg_attributions.append(f"{top_politician}: {word.capitalize()} ({min_score:+.2f})")
+                    if neg_attributions:
+                        metrics["most_negative_word_attribution"] = ", ".join(neg_attributions)
+
+            except Exception as e:
+                app.logger.error(f"Error fetching extreme word attribution: {e}")
+
     except Exception as e:
-        app.logger.error(f"Error fetching dataset metrics: {e}")
+        app.logger.error(f"Major error in fetch_dataset_metrics: {e}")
         return {key: "Error" for key in metric_keys}
+    
+    return metrics
 
 def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
     df_cols = ["Timestamp", "Politician", "Word", "Sentiment"]
