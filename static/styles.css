@@ -350,3 +350,8 @@ div.metrics-container ul li span {
     div.metrics-container ul li { font-size: 0.85em; }
     .metrics-container ul { padding: 10px 5px; }
 }
+
+#min_votes_slider_sentiment {
+        width: 100%;
+
+}
