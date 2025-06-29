@@ -815,6 +815,17 @@ def favicon():
 def page_not_found(e):
     return render_template('404.html'), 404
 
+@app.route('/healthz')
+def health_check():
+    """
+    Railway health check endpoint.
+    This tells the load balancer that the application is up and running.
+    """
+    # For now, a simple "OK" is sufficient. You could add a database
+    # check here in the future if needed, but it's not necessary to
+    # solve the SSL race condition.
+    return "OK", 200
+
 # --- Main Entry Point ---
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
