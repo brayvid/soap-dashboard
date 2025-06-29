@@ -566,7 +566,7 @@ def dashboard():
     if not engine:
         return render_template('error.html', message="CRITICAL: Database connection failed. Dashboard cannot operate.")
 
-    active_tab = request.args.get('tab', 'sentiment')
+    active_tab = request.args.get('tab', 'overview')
 
     # Fetch this once for all tabs that might need it (e.g., dropdowns)
     politicians_list_df = fetch_politicians_list(engine)

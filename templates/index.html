@@ -6,18 +6,18 @@
 {% block content %}
 
     <nav class="dashboard-tabs" style="margin-bottom: 20px; text-align: center;">
-        <a href="{{ url_for('dashboard', tab='sentiment') }}"
-           class="tab-link {% if active_tab == 'sentiment' %}active{% endif %}">Sentiment</a>
-        <a href="{{ url_for('dashboard', tab='approval') }}"
-           class="tab-link {% if active_tab == 'approval' %}active{% endif %}">Approval</a>
-        <a href="{{ url_for('dashboard', tab='top_word') }}"
-           class="tab-link {% if active_tab == 'top_word' %}active{% endif %}">Top Word</a>
-        <a href="{{ url_for('dashboard', tab='similarity') }}"
-           class="tab-link {% if active_tab == 'similarity' %}active{% endif %}">Similarity</a>
         <a href="{{ url_for('dashboard', tab='overview') }}"
-           class="tab-link {% if active_tab == 'overview' %}active{% endif %}">Overview</a>
+        class="tab-link {% if active_tab == 'overview' %}active{% endif %}">Overview</a>
+        <a href="{{ url_for('dashboard', tab='sentiment') }}"
+        class="tab-link {% if active_tab == 'sentiment' %}active{% endif %}">Sentiment</a>
+        <a href="{{ url_for('dashboard', tab='approval') }}"
+        class="tab-link {% if active_tab == 'approval' %}active{% endif %}">Approval</a>
+        <a href="{{ url_for('dashboard', tab='top_word') }}"
+        class="tab-link {% if active_tab == 'top_word' %}active{% endif %}">Top Word</a>
+        <a href="{{ url_for('dashboard', tab='similarity') }}"
+        class="tab-link {% if active_tab == 'similarity' %}active{% endif %}">Similarity</a>
         <a href="{{ url_for('dashboard', tab='feed') }}"
-           class="tab-link {% if active_tab == 'feed' %}active{% endif %}">Feed</a>
+        class="tab-link {% if active_tab == 'feed' %}active{% endif %}">Feed</a>
     </nav>
     <hr style="margin-bottom: 20px;">
 
