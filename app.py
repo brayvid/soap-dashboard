@@ -401,14 +401,27 @@ NEG_COLOR = '#CD5C5C'  # Indian Red
 NEU_COLOR = '#BFBFBF'  # Muted Gray
 POS_COLOR = '#2E8B57'  # Sea Green
 
-# Create the custom colormap globally
+# --- Plotting Functions ---
+
+# Create a custom colormap that mirrors the D3.js front-end scheme.
+# The colormap is defined on a normalized scale from 0.0 to 1.0,
+# which corresponds to the sentiment score range of -1.0 to +1.0.
+# The formula is: normalized_position = (score + 1) / 2
+
 sentiment_cmap_colors = [
-    (0.0, NEG_COLOR),    # -1.0 sentiment score maps to 0.0 in normalized range
-    (0.5, NEU_COLOR),    # 0.0 sentiment score maps to 0.5 in normalized range
-    (1.0, POS_COLOR)     # 1.0 sentiment score maps to 1.0 in normalized range
+    # Negative Range: from Most Negative (-1.0) to A Little Negative (-0.05)
+    (0.0,    '#DE3B3B'),  # Corresponds to score -1.0
+    (0.475,  '#CDb14c'),  # Corresponds to score -0.05
+
+    # Neutral Zone: solid gray from -0.05 to +0.05
+    (0.475,  '#BFBFBF'),  # Start of neutral zone
+    (0.525,  '#BFBFBF'),  # End of neutral zone
+
+    # Positive Range: from A Little Positive (+0.05) to Most Positive (+1.0)
+    (0.525,  '#9fad42'),  # Corresponds to score +0.05
+    (1.0,    '#2a8d64')   # Corresponds to score +1.0
 ]
 SENTIMENT_COLORMAP = LinearSegmentedColormap.from_list("sentiment_spectrum", sentiment_cmap_colors)
-
 def plot_multi_sentiment_histograms_to_image(df_scores_multi, num_bins=12):
     if df_scores_multi.empty or 'sentiment_score' not in df_scores_multi.columns:
         return None
