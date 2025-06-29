@@ -585,8 +585,8 @@ def dashboard():
 
     # --- START: STREAMLINED SENTIMENT TAB LOGIC (Histograms with Slider & Median Sort) ---
     if active_tab == 'sentiment':
-        min_votes_param = request.args.get('min_votes_sentiment', '50') # Change '20' to '50'
-        min_votes = int(min_votes_param) if min_votes_param.isdigit() else 50 # Change '20' to '50'
+        min_votes_param = request.args.get('min_votes_sentiment', '100') 
+        min_votes = int(min_votes_param) if min_votes_param.isdigit() else 100
         
         # Step 1: Fetch all raw sentiment scores for all politicians
         # We fetch for all, then filter by min_votes in Python.
