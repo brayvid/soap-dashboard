@@ -6,21 +6,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Dashboard for analyzing political sentiment and trends.">
     
     <title>Soap | Dashboard</title>
     
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link rel="icon" href="{{ url_for('favicon') }}" type="image/x-icon">
 
-    <!-- Google tag (gtag.js) -->
+    {# 1. REMOVED the old Google Fonts link. Fonts are now in your CSS. #}
+
+    {# 2. INLINE CRITICAL CSS: Paste the minimal CSS needed for the above-the-fold content here. #}
+    <style>
+      /* Generate this using an online tool. This is a placeholder. */
+      body { font-family: 'Inter', sans-serif; background-color: #fff; color: #212529; }
+      .navbar { display: flex; justify-content: space-between; padding: 1rem; }
+    </style>
+
+    {# 3. LOAD FULL STYLESHEET ASYNCHRONOUSLY using the Flask-Assets bundle we created. #}
+    {% assets "css_all" %}
+      <link rel="stylesheet" href="{{ ASSET_URL }}" media="print" onload="this.media='all'">
+    {% endassets %}
+    <noscript><link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"></noscript>
+
+    <!-- Google tag (gtag.js) is already async, which is correct. -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-QL7EMV1Y4X"></script>
     <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-
-    gtag('config', 'G-QL7EMV1Y4X');
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-QL7EMV1Y4X');
     </script>
     {% block head_extra %}{% endblock %}
 </head>

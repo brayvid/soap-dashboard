@@ -1,5 +1,25 @@
 /* Copyright 2024-2025 soap.fyi. All rights reserved. <https://soap.fyi> */
 
+/* static/styles.css --- */
+
+/* CORRECTED FONT PATHS */
+@font-face {
+  font-display: swap;
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  /* Removed the ../ from the path below */
+  src: url('/static/fonts/inter-v19-latin-regular.woff2') format('woff2'); 
+}
+@font-face {
+  font-display: swap;
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  /* Removed the ../ from the path below */
+  src: url('/static/fonts/inter-v19-latin-600.woff2') format('woff2');
+}
+
 /* --- Color & Theme Variables --- */
 :root {
   --positive-color: #2E8B57; /* Sea Green (Matches politician.js) */

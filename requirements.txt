@@ -1,13 +1,22 @@
+# Web Framework & Extensions
 Flask
-pandas
-SQLAlchemy
-psycopg2-binary  
-matplotlib
-seaborn
-scikit-learn
-gunicorn         
-python-dotenv
-spacy
+Flask-Assets
+Flask-Compress
+gunicorn
 
-# spacy model
+# Data, DB, & ML
+matplotlib
+pandas
+psycopg2-binary  
+scikit-learn
+seaborn
+spacy
+SQLAlchemy
+
+# Utilities
+cssmin
+python-dotenv
+
+# Spacy Model
+# This line installs a specific version of the model directly from GitHub.
 https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl
