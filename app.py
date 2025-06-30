@@ -602,7 +602,7 @@ def dashboard():
                         original_name_order = df_all_for_selection[df_all_for_selection['politician_id'].isin(ids_for_calc)]['politician_name'].tolist()
                         ordered_names_in_matrix = [name for name in original_name_order if name in comp_df.index]
                         if ordered_names_in_matrix: comp_df = comp_df.reindex(index=ordered_names_in_matrix, columns=ordered_names_in_matrix)
-                        heatmap_buf = plot_comparison_heatmap_to_image(comp_df, title="Semantic Comparison Heatmap", cbar_label="Cosine Similarity of Word Collections (0-1)")
+                        heatmap_buf = plot_comparison_heatmap_to_image(comp_df, title="Semantic Similarity Heatmap", cbar_label="Cosine Similarity of Word Collections (0-1)")
                         compare_data_dict['heatmap_img_base64'] = get_image_as_base64(heatmap_buf)
                         compare_data_dict['comparison_df_html'] = comp_df.style.format("{:.3f}").to_html(classes='styled-table', border=0)
                         compare_data_dict['df_for_comparison_calc'] = comp_df

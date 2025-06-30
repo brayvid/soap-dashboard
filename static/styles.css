@@ -103,7 +103,7 @@ body {
 .footer-link { color: #70c1b3; } /* This color is unique, can also be a variable if needed */
 
 .footer p {
-  font-size: 0.6em;
+  font-size: 0.77em;
 }
 /* --- Navigation Tabs --- */
 .dashboard-tabs { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; padding: 0 10px; box-sizing: border-box; flex-wrap: nowrap; }
