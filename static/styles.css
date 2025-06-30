@@ -288,7 +288,7 @@ button.button-primary:hover { background-color: #5c9acb; }
 }
 .metrics-container ul {
   list-style-type: none;
-  padding: 20px;
+  padding: 20px !important;
   margin: 0;
 }
 div.metrics-container ul li {

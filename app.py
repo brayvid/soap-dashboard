@@ -15,7 +15,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import base64
 import datetime
-import spacy # Added for semantic similarity
+import spacy # Added for semantic comparison
 from matplotlib.colors import LinearSegmentedColormap # Import this for custom colormaps
 
 # --- SPEED OPTIMIZATIONS: Import required libraries ---
@@ -78,7 +78,7 @@ def get_engine():
         return None
 engine = get_engine()
 
-# --- Data Fetching Functions ---
+# --- Data Fetching Functions (No changes needed in these functions) ---
 def fetch_politicians_list(_engine):
     if not _engine: return pd.DataFrame({'politician_id': [], 'name': []})
     query = text("SELECT politician_id, name FROM politicians ORDER BY name ASC;")
@@ -219,11 +219,6 @@ def fetch_weekly_approval_rating(_engine, politician_ids_list):
         app.logger.error(f"Error in fetch_weekly_approval_rating: {e}\nQuery: {query}")
         return pd.DataFrame()
 
-# =====================================================================================
-# DEBUGGING CHANGE: The 'try...except' block is temporarily disabled in this function.
-# This will cause the app to show a full error page if a database query fails.
-# REMEMBER TO RE-ENABLE IT after the issue is fixed.
-# =====================================================================================
 def fetch_dataset_metrics(_engine):
     metric_keys = [
         "total_politicians", "total_words_scorable", "total_votes", "votes_date_range",
@@ -236,95 +231,95 @@ def fetch_dataset_metrics(_engine):
     if not _engine: return {key: "N/A" for key in metric_keys}
     metrics = {key: "N/A" for key in metric_keys}
     MIN_VOTES_FOR_RATING = 20
-    # try: # Temporarily disabled for debugging
-    with _engine.connect() as connection:
-        metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or 0
-        metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or 0
-        metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or 0
-        res_dates = connection.execute(text("SELECT MIN(created_at)::date, MAX(created_at)::date FROM votes;")).fetchone()
-        if res_dates and res_dates[0] and res_dates[1]:
-            metrics["votes_date_range"] = f"{res_dates[0].strftime('%Y-%m-%d')} to {res_dates[1].strftime('%Y-%m-%d')}"
-        if metrics["total_votes"] > 0 and metrics["total_politicians"] > 0:
-            metrics["avg_submissions_per_politician"] = f"{(metrics['total_votes'] / metrics['total_politicians']):.1f}"
-        try:
-            metrics["submissions_last_7_days"] = f"{connection.execute(text('''SELECT COUNT(*) FROM votes WHERE created_at >= NOW() - INTERVAL '7 days';''')).scalar_one():,}"
-        except Exception as e: app.logger.error(f"Error fetching submissions_last_7_days: {e}")
-        sentiment_query = text("SELECT SUM(w.sentiment_score), COUNT(v.vote_id) FROM votes v JOIN words w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL;")
-        sentiment_res = connection.execute(sentiment_query).fetchone()
-        if sentiment_res and sentiment_res[1] and sentiment_res[1] > 0:
-            total_sum, count_votes = sentiment_res[0], sentiment_res[1]
-            metrics["net_sentiment_sum_all_submissions"] = f"{total_sum:.2f}"
-            avg_score = total_sum / count_votes
-            metrics["average_sentiment_score_all_submissions"] = f"{avg_score:.4f}"
-            approval_percent = (((avg_score / 2.0) + 0.5) * 100.0)
-            metrics["net_approval_rating_percent_all_submissions"] = f"{approval_percent:.2f}%"
-        try:
-            res = connection.execute(text("""
-                WITH r AS (SELECT DATE(created_at) d, COUNT(*) c, RANK() OVER (ORDER BY COUNT(*) DESC) rnk FROM votes GROUP BY d)
-                SELECT d, c FROM r WHERE rnk = 1;
-            """)).fetchall()
-            if res: metrics["most_active_day"] = ", ".join([f"{d.strftime('%Y-%m-%d')} ({c} submissions)" for d, c in res])
-        except Exception as e: app.logger.error(f"Error fetching most_active_day: {e}")
-        try:
-            res = connection.execute(text("""
-                WITH r AS (SELECT p.name n, COUNT(v.vote_id) c, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) rnk FROM votes v JOIN politicians p ON v.politician_id = p.politician_id GROUP BY p.name)
-                SELECT n, c FROM r WHERE rnk = 1;
-            """)).fetchall()
-            if res: metrics["most_described_politician"] = ", ".join([f"{n} ({c} submissions)" for n, c in res])
-        except Exception as e: app.logger.error(f"Error fetching most_described_politician: {e}")
-        try:
-            res = connection.execute(text("""
-                WITH s AS (SELECT p.name n, (SUM(w.sentiment_score)/COUNT(v.vote_id)) sc, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) DESC) r_hi, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) ASC) r_lo FROM votes v JOIN words w ON v.word_id=w.word_id JOIN politicians p ON v.politician_id=p.politician_id WHERE w.sentiment_score IS NOT NULL GROUP BY p.name HAVING COUNT(v.vote_id) >= :min_votes)
-                SELECT n, sc, r_hi, r_lo FROM s WHERE r_hi=1 OR r_lo=1;
-            """), {'min_votes': MIN_VOTES_FOR_RATING}).fetchall()
-            if res:
-                hi_rated = [f"{r.n} ({(((r.sc/2.0)+0.5)*100.0):.1f}%)" for r in res if r.r_hi==1]
-                lo_rated = [f"{r.n} ({(((r.sc/2.0)+0.5)*100.0):.1f}%)" for r in res if r.r_lo==1]
-                if hi_rated: metrics["highest_rated_politician"] = ", ".join(hi_rated)
-                if lo_rated: metrics["lowest_rated_politician"] = ", ".join(lo_rated)
-        except Exception as e: app.logger.error(f"Error fetching politician_ratings: {e}")
-        try:
-            extreme_words_query = text("""
-                SELECT word, sentiment_score FROM words WHERE sentiment_score = (SELECT MAX(sentiment_score) FROM words)
-                UNION ALL
-                SELECT word, sentiment_score FROM words WHERE sentiment_score = (SELECT MIN(sentiment_score) FROM words);
-            """)
-            extreme_words = connection.execute(extreme_words_query).fetchall()
-            if extreme_words:
-                max_score = max(w.sentiment_score for w in extreme_words)
-                min_score = min(w.sentiment_score for w in extreme_words)
-                positive_words = [w.word for w in extreme_words if w.sentiment_score == max_score]
-                negative_words = [w.word for w in extreme_words if w.sentiment_score == min_score]
-                attribution_query = text("""
-                    WITH AttributionCounts AS (
-                        SELECT p.name, COUNT(v.vote_id) as use_count,
-                        RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) as rnk
-                        FROM votes v
-                        JOIN politicians p ON v.politician_id = p.politician_id
-                        JOIN words w ON v.word_id = w.word_id
-                        WHERE w.word = :word
-                        GROUP BY p.name
-                    )
-                    SELECT name FROM AttributionCounts WHERE rnk = 1 LIMIT 1;
+    try:
+        with _engine.connect() as connection:
+            metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or 0
+            metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or 0
+            metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or 0
+            res_dates = connection.execute(text("SELECT MIN(created_at)::date, MAX(created_at)::date FROM votes;")).fetchone()
+            if res_dates and res_dates[0] and res_dates[1]:
+                metrics["votes_date_range"] = f"{res_dates[0].strftime('%Y-%m-%d')} to {res_dates[1].strftime('%Y-%m-%d')}"
+            if metrics["total_votes"] > 0 and metrics["total_politicians"] > 0:
+                metrics["avg_submissions_per_politician"] = f"{(metrics['total_votes'] / metrics['total_politicians']):.1f}"
+            try:
+                metrics["submissions_last_7_days"] = f"{connection.execute(text('''SELECT COUNT(*) FROM votes WHERE created_at >= NOW() - INTERVAL '7 days';''')).scalar_one():,}"
+            except Exception as e: app.logger.error(f"Error fetching submissions_last_7_days: {e}")
+            sentiment_query = text("SELECT SUM(w.sentiment_score), COUNT(v.vote_id) FROM votes v JOIN words w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL;")
+            sentiment_res = connection.execute(sentiment_query).fetchone()
+            if sentiment_res and sentiment_res[1] and sentiment_res[1] > 0:
+                total_sum, count_votes = sentiment_res[0], sentiment_res[1]
+                metrics["net_sentiment_sum_all_submissions"] = f"{total_sum:.2f}"
+                avg_score = total_sum / count_votes
+                metrics["average_sentiment_score_all_submissions"] = f"{avg_score:.4f}"
+                approval_percent = (((avg_score / 2.0) + 0.5) * 100.0)
+                metrics["net_approval_rating_percent_all_submissions"] = f"{approval_percent:.2f}%"
+            try:
+                res = connection.execute(text("""
+                    WITH r AS (SELECT DATE(created_at) d, COUNT(*) c, RANK() OVER (ORDER BY COUNT(*) DESC) rnk FROM votes GROUP BY d)
+                    SELECT d, c FROM r WHERE rnk = 1;
+                """)).fetchall()
+                if res: metrics["most_active_day"] = ", ".join([f"{d.strftime('%Y-%m-%d')} ({c} submissions)" for d, c in res])
+            except Exception as e: app.logger.error(f"Error fetching most_active_day: {e}")
+            try:
+                res = connection.execute(text("""
+                    WITH r AS (SELECT p.name n, COUNT(v.vote_id) c, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) rnk FROM votes v JOIN politicians p ON v.politician_id = p.politician_id GROUP BY p.name)
+                    SELECT n, c FROM r WHERE rnk = 1;
+                """)).fetchall()
+                if res: metrics["most_described_politician"] = ", ".join([f"{n} ({c} submissions)" for n, c in res])
+            except Exception as e: app.logger.error(f"Error fetching most_described_politician: {e}")
+            try:
+                res = connection.execute(text("""
+                    WITH s AS (SELECT p.name n, (SUM(w.sentiment_score)/COUNT(v.vote_id)) sc, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) DESC) r_hi, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) ASC) r_lo FROM votes v JOIN words w ON v.word_id=w.word_id JOIN politicians p ON v.politician_id=p.politician_id WHERE w.sentiment_score IS NOT NULL GROUP BY p.name HAVING COUNT(v.vote_id) >= :min_votes)
+                    SELECT n, sc, r_hi, r_lo FROM s WHERE r_hi=1 OR r_lo=1;
+                """), {'min_votes': MIN_VOTES_FOR_RATING}).fetchall()
+                if res:
+                    hi_rated = [f"{r.n} ({(((r.sc/2.0)+0.5)*100.0):.1f}%)" for r in res if r.r_hi==1]
+                    lo_rated = [f"{r.n} ({(((r.sc/2.0)+0.5)*100.0):.1f}%)" for r in res if r.r_lo==1]
+                    if hi_rated: metrics["highest_rated_politician"] = ", ".join(hi_rated)
+                    if lo_rated: metrics["lowest_rated_politician"] = ", ".join(lo_rated)
+            except Exception as e: app.logger.error(f"Error fetching politician_ratings: {e}")
+            try:
+                extreme_words_query = text("""
+                    SELECT word, sentiment_score FROM words WHERE sentiment_score = (SELECT MAX(sentiment_score) FROM words)
+                    UNION ALL
+                    SELECT word, sentiment_score FROM words WHERE sentiment_score = (SELECT MIN(sentiment_score) FROM words);
                 """)
-                pos_attributions = []
-                for word in positive_words:
-                    top_politician = connection.execute(attribution_query, {'word': word}).scalar_one_or_none()
-                    if top_politician:
-                        pos_attributions.append(f"{top_politician}: {word.capitalize()} ({max_score:+.2f})")
-                if pos_attributions:
-                    metrics["most_positive_word_attribution"] = ", ".join(pos_attributions)
-                neg_attributions = []
-                for word in negative_words:
-                    top_politician = connection.execute(attribution_query, {'word': word}).scalar_one_or_none()
-                    if top_politician:
-                        neg_attributions.append(f"{top_politician}: {word.capitalize()} ({min_score:+.2f})")
-                if neg_attributions:
-                    metrics["most_negative_word_attribution"] = ", ".join(neg_attributions)
-        except Exception as e: app.logger.error(f"Error fetching extreme word attribution: {e}")
-    # except Exception as e: # Temporarily disabled for debugging
-    #     app.logger.error(f"Major error in fetch_dataset_metrics: {e}")
-    #     return {key: "Error" for key in metric_keys}
+                extreme_words = connection.execute(extreme_words_query).fetchall()
+                if extreme_words:
+                    max_score = max(w.sentiment_score for w in extreme_words)
+                    min_score = min(w.sentiment_score for w in extreme_words)
+                    positive_words = [w.word for w in extreme_words if w.sentiment_score == max_score]
+                    negative_words = [w.word for w in extreme_words if w.sentiment_score == min_score]
+                    attribution_query = text("""
+                        WITH AttributionCounts AS (
+                            SELECT p.name, COUNT(v.vote_id) as use_count,
+                            RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) as rnk
+                            FROM votes v
+                            JOIN politicians p ON v.politician_id = p.politician_id
+                            JOIN words w ON v.word_id = w.word_id
+                            WHERE w.word = :word
+                            GROUP BY p.name
+                        )
+                        SELECT name FROM AttributionCounts WHERE rnk = 1 LIMIT 1;
+                    """)
+                    pos_attributions = []
+                    for word in positive_words:
+                        top_politician = connection.execute(attribution_query, {'word': word}).scalar_one_or_none()
+                        if top_politician:
+                            pos_attributions.append(f"{top_politician}: {word.capitalize()} ({max_score:+.2f})")
+                    if pos_attributions:
+                        metrics["most_positive_word_attribution"] = ", ".join(pos_attributions)
+                    neg_attributions = []
+                    for word in negative_words:
+                        top_politician = connection.execute(attribution_query, {'word': word}).scalar_one_or_none()
+                        if top_politician:
+                            neg_attributions.append(f"{top_politician}: {word.capitalize()} ({min_score:+.2f})")
+                    if neg_attributions:
+                        metrics["most_negative_word_attribution"] = ", ".join(neg_attributions)
+            except Exception as e: app.logger.error(f"Error fetching extreme word attribution: {e}")
+    except Exception as e:
+        app.logger.error(f"Major error in fetch_dataset_metrics: {e}")
+        return {key: "Error" for key in metric_keys}
     return metrics
 
 def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
@@ -394,7 +389,7 @@ def fetch_top_weekly_word_for_politician(_engine, politician_id):
         return pd.DataFrame(columns=df_cols)
 
 
-# --- Plotting Functions ---
+# --- Plotting Functions (Changes applied here) ---
 SENTIMENT_COLORMAP = LinearSegmentedColormap.from_list("sentiment_spectrum", [
     (0.0,    '#DE3B3B'), (0.475,  '#CDb14c'), (0.475,  '#BFBFBF'), (0.525,  '#BFBFBF'),
     (0.525,  '#9fad42'), (1.0,    '#2a8d64')
@@ -459,9 +454,9 @@ def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, yl
     img_buf = BytesIO(); fig.savefig(img_buf, format="png", bbox_inches='tight', dpi=100); img_buf.seek(0)
     plt.close(fig); return img_buf
 
-def plot_similarity_heatmap_to_image(similarity_matrix_df, title="Similarity Matrix", cbar_label="Cosine Similarity"):
-    if similarity_matrix_df.empty or len(similarity_matrix_df) < 2: return None
-    plot_df = similarity_matrix_df.copy()
+def plot_comparison_heatmap_to_image(comparison_matrix_df, title="Comparison Matrix", cbar_label="Cosine Similarity"):
+    if comparison_matrix_df.empty or len(comparison_matrix_df) < 2: return None
+    plot_df = comparison_matrix_df.copy()
     display_n = len(plot_df)
     for col in plot_df.columns: plot_df[col] = pd.to_numeric(plot_df[col], errors='coerce')
     fig_height = max(8, min(25, 3 + display_n * 0.9)); fig_width = fig_height * 1.2
@@ -481,110 +476,110 @@ def get_image_as_base64(img_buf):
         return base64.b64encode(img_buf.read()).decode('utf-8')
     return None
 
-# --- Main Dashboard Route ---
+# --- Main Dashboard Route (REFACTORED with changes) ---
 @app.route('/')
 def dashboard():
     if not engine:
         return render_template('error.html', message="CRITICAL: Database connection failed. Dashboard cannot operate.")
+    
     active_tab = request.args.get('tab', 'overview')
+    
     politicians_list_df = fetch_politicians_list(engine)
-    sentiment_tab_data = {}
-    approval_tab_data = {}
-    top_word_tab_data = {}
-    similarity_data_dict = {}
+
+    lookup_tab_data = {}
+    compare_data_dict = {} # Renamed from similarity_data_dict
     overview_tab_data = {}
     feed_data_dict = {}
 
-    if active_tab == 'sentiment':
-        min_votes_param = request.args.get('min_votes_sentiment', '100')
-        min_votes = int(min_votes_param) if min_votes_param.isdigit() else 100
-        all_politician_ids = politicians_list_df['politician_id'].tolist() if not politicians_list_df.empty else []
-        df_scores_raw = fetch_raw_sentiments_for_multiple_politicians(engine, all_politician_ids)
-        qualifying_politicians_df = pd.DataFrame()
-        if not df_scores_raw.empty:
-            politician_aggregates = df_scores_raw.groupby(['politician_id', 'politician_name']).agg(
-                total_votes=('sentiment_score', 'count'), median_sentiment=('sentiment_score', 'median')).reset_index()
-            qualifying_politicians_df = politician_aggregates[politician_aggregates['total_votes'] >= min_votes].copy()
-            qualifying_politicians_df.sort_values(by='median_sentiment', ascending=False, inplace=True)
-            pids_to_plot_in_order = qualifying_politicians_df['politician_id'].tolist()
-            politicians_names_in_order = qualifying_politicians_df['politician_name'].tolist()
-            df_scores_for_plotting = df_scores_raw[df_scores_raw['politician_id'].isin(pids_to_plot_in_order)].copy()
-            if not df_scores_for_plotting.empty:
-                df_scores_for_plotting['politician_name'] = pd.Categorical(df_scores_for_plotting['politician_name'], categories=politicians_names_in_order, ordered=True)
-                df_scores_for_plotting.sort_values('politician_name', inplace=True)
-                histogram_buf = plot_multi_sentiment_histograms_to_image(df_scores_for_plotting, num_bins=12)
-                sentiment_tab_data['histogram_img_base64'] = get_image_as_base64(histogram_buf)
-            else: sentiment_tab_data['histogram_img_base64'] = None
-        else: sentiment_tab_data['histogram_img_base64'] = None
-        sentiment_tab_data['min_votes_current'] = min_votes
-        sentiment_tab_data['politician_count'] = len(qualifying_politicians_df)
-
-    elif active_tab == 'approval':
+    if active_tab == 'lookup':
         politicians_by_votes_df = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
-        selected_politician_ids_str = request.args.getlist('politician_ids_approval')
-        selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
-        if not selected_politician_ids_str and not politicians_list_df.empty:
-            if DEFAULT_TRUMP_ID in politicians_list_df['politician_id'].values: selected_politician_ids = [DEFAULT_TRUMP_ID]
-            elif not politicians_by_votes_df.empty: selected_politician_ids = [int(politicians_by_votes_df['politician_id'].iloc[0])]
-        if "All" in request.args.get('politician_select_mode_approval', '') and not politicians_list_df.empty:
-            selected_politician_ids_for_query = politicians_list_df['politician_id'].tolist()
-        else: selected_politician_ids_for_query = selected_politician_ids
-        weekly_df_multiple = pd.DataFrame(); weekly_approval_img_base64 = None; selected_politician_names = []
-        if selected_politician_ids_for_query and not politicians_list_df.empty:
-            selected_politician_names = politicians_list_df[politicians_list_df['politician_id'].isin(selected_politician_ids_for_query)]['name'].tolist()
-            weekly_df_multiple = fetch_weekly_approval_rating(engine, selected_politician_ids_for_query)
+        selected_politician_ids_str = request.args.getlist('politician_ids_lookup')
+        select_all_mode = "All" in request.args.get('politician_select_mode_lookup', '')
+        MAX_LOOKUP_POLITICIANS_CONST = 30
+        
+        selected_politician_ids = []
+
+        if select_all_mode:
+            if not politicians_by_votes_df.empty:
+                selected_politician_ids = politicians_by_votes_df['politician_id'].head(MAX_LOOKUP_POLITICIANS_CONST).tolist()
+        elif selected_politician_ids_str:
+            selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
+        else:
+            if not politicians_by_votes_df.empty:
+                num_to_select = min(5, len(politicians_by_votes_df))
+                selected_politician_ids = politicians_by_votes_df['politician_id'].head(num_to_select).tolist()
+        
+        ids_for_query = selected_politician_ids
+        selected_politician_names = []
+        if ids_for_query and not politicians_list_df.empty:
+            selected_politician_names = politicians_list_df[politicians_list_df['politician_id'].isin(ids_for_query)]['name'].tolist()
+
+        lookup_tab_data = {
+            'all_politicians': politicians_list_df,
+            'selected_politician_ids': selected_politician_ids,
+            'selected_politician_names': selected_politician_names,
+            'weekly_approval_img_base64': None,
+            'histogram_img_base64': None,
+            'top_word_tables': [],
+            'MAX_LOOKUP_POLITICIANS': MAX_LOOKUP_POLITICIANS_CONST
+        }
+
+        if ids_for_query:
+            weekly_df_multiple = fetch_weekly_approval_rating(engine, ids_for_query)
             if not weekly_df_multiple.empty and 'weekly_approval_rating_percent' in weekly_df_multiple.columns and weekly_df_multiple['weekly_approval_rating_percent'].notna().any():
                 weekly_approval_img_buf = plot_multiline_chart_to_image(
                     weekly_df_multiple, x_col='week_start_date', y_col='weekly_approval_rating_percent',
-                    group_col='politician_name', title='Weekly Approval Rating (Normalized Sentiment)', xlabel='Week Start Date', ylabel='Approval Rating (0-100%)')
-                weekly_approval_img_base64 = get_image_as_base64(weekly_approval_img_buf)
-        df_display_ready = pd.DataFrame()
-        if not weekly_df_multiple.empty:
-            cols_to_display = ['politician_name', 'year_week', 'week_start_date', 'weekly_approval_rating_percent', 'total_votes_in_week']
-            actual_cols = [col for col in cols_to_display if col in weekly_df_multiple.columns]
-            if actual_cols: df_display_ready = weekly_df_multiple[actual_cols].copy()
-        approval_tab_data = {'all_politicians': politicians_list_df, 'selected_politician_ids': selected_politician_ids, 'selected_politician_names': selected_politician_names, 'df_display_ready': df_display_ready, 'weekly_approval_img_base64': weekly_approval_img_base64}
+                    group_col='politician_name', title='Weekly Approval Rating Trend', xlabel='Week Start Date', ylabel='Approval Rating (0-100%)')
+                lookup_tab_data['weekly_approval_img_base64'] = get_image_as_base64(weekly_approval_img_buf)
 
-    elif active_tab == 'top_word':
-        politicians_by_votes_df = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
-        selected_pid_top_word_str = request.args.get('politician_id_top_word')
-        selected_pid_top_word = None
-        if selected_pid_top_word_str and selected_pid_top_word_str.isdigit():
-            if not politicians_list_df.empty and int(selected_pid_top_word_str) in politicians_list_df['politician_id'].values: selected_pid_top_word = int(selected_pid_top_word_str)
-            else: app.logger.warning(f"Invalid politician_id_top_word received: {selected_pid_top_word_str}. Defaulting.")
-        if selected_pid_top_word is None:
-            if not politicians_by_votes_df.empty and DEFAULT_TRUMP_ID in politicians_by_votes_df['politician_id'].values: selected_pid_top_word = DEFAULT_TRUMP_ID
-            elif not politicians_by_votes_df.empty: selected_pid_top_word = int(politicians_by_votes_df['politician_id'].iloc[0])
-        top_words_df = pd.DataFrame(); selected_politician_name_top_word = "N/A"
-        if selected_pid_top_word is not None:
-            top_words_df = fetch_top_weekly_word_for_politician(engine, selected_pid_top_word)
-            if not politicians_list_df.empty:
-                name_row = politicians_list_df[politicians_list_df['politician_id'] == selected_pid_top_word]
-                if not name_row.empty: selected_politician_name_top_word = name_row['name'].iloc[0]
-        top_words_list_for_template = []
-        if not top_words_df.empty:
-            top_words_list_for_template = top_words_df.to_dict(orient='records')
-            for item in top_words_list_for_template:
-                if 'Week Start Date' in item and hasattr(item['Week Start Date'], 'strftime'): item['Week Start Date'] = item['Week Start Date'].strftime('%Y-%m-%d')
-        top_word_tab_data = {'all_politicians': politicians_list_df, 'selected_politician_id': selected_pid_top_word, 'selected_politician_name': selected_politician_name_top_word, 'top_words_list': top_words_list_for_template}
+            df_scores_raw = fetch_raw_sentiments_for_multiple_politicians(engine, ids_for_query)
+            if not df_scores_raw.empty:
+                df_scores_raw['politician_name'] = pd.Categorical(df_scores_raw['politician_name'], categories=selected_politician_names, ordered=True)
+                df_scores_raw.sort_values('politician_name', inplace=True)
+                histogram_buf = plot_multi_sentiment_histograms_to_image(df_scores_raw, num_bins=12)
+                lookup_tab_data['histogram_img_base64'] = get_image_as_base64(histogram_buf)
+            
+            top_word_tables_list = []
+            for pid in selected_politician_ids:
+                pname = politicians_list_df[politicians_list_df['politician_id'] == pid]['name'].iloc[0]
+                top_words_df = fetch_top_weekly_word_for_politician(engine, pid)
+                top_words_list_for_template = []
+                if not top_words_df.empty:
+                    top_words_list_for_template = top_words_df.to_dict(orient='records')
+                    for item in top_words_list_for_template:
+                        if 'Week Start Date' in item and hasattr(item['Week Start Date'], 'strftime'):
+                            item['Week Start Date'] = item['Week Start Date'].strftime('%Y-%m-%d')
+                
+                top_word_tables_list.append({
+                    'politician_name': pname,
+                    'top_words_list': top_words_list_for_template
+                })
+            lookup_tab_data['top_word_tables'] = top_word_tables_list
 
-    elif active_tab == 'similarity':
+    elif active_tab == 'compare': # Renamed from 'similarity'
         politicians_by_votes_df = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
         MAX_HEATMAP_POLITICIANS_CONST = 30
-        similarity_data_dict = {'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST, 'available_politicians': [], 'selected_politician_ids': [], 'heatmap_img_base64': None, 'similarity_df_html': None, 'error_message': None, 'df_for_similarity_calc': pd.DataFrame()}
+        compare_data_dict = {'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST, 'available_politicians': [], 'selected_politician_ids': [], 'heatmap_img_base64': None, 'comparison_df_html': None, 'error_message': None, 'df_for_comparison_calc': pd.DataFrame()}
         if not SPACY_MODEL_LOADED:
-            similarity_data_dict['error_message'] = "Semantic similarity calculation is disabled because the required spaCy language model ('en_core_web_md') is not installed."
+            compare_data_dict['error_message'] = "Semantic comparison calculation is disabled because the required spaCy language model ('en_core_web_md') is not installed."
         else:
             df_all_for_selection = politicians_by_votes_df
             if not df_all_for_selection.empty:
                 df_form_list = df_all_for_selection.sort_values('politician_name', ascending=True)
-                similarity_data_dict['available_politicians'] = df_form_list[['politician_id', 'politician_name']].to_dict(orient='records')
-            selected_politician_ids_str = request.args.getlist('politician_ids_similarity')
+                compare_data_dict['available_politicians'] = df_form_list[['politician_id', 'politician_name']].to_dict(orient='records')
+            
+            selected_politician_ids_str = request.args.getlist('politician_ids_compare') # Renamed
             selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
-            if not selected_politician_ids_str and not df_all_for_selection.empty: selected_politician_ids = df_all_for_selection['politician_id'].head(min(5, len(df_all_for_selection))).tolist()
-            if "All" in request.args.get('politician_select_mode_similarity', '') and not df_all_for_selection.empty: ids_for_calc = df_all_for_selection['politician_id'].head(MAX_HEATMAP_POLITICIANS_CONST).tolist()
-            else: ids_for_calc = selected_politician_ids
-            similarity_data_dict['selected_politician_ids'] = selected_politician_ids
+            
+            if not selected_politician_ids_str and not df_all_for_selection.empty: 
+                selected_politician_ids = df_all_for_selection['politician_id'].head(min(5, len(df_all_for_selection))).tolist()
+            
+            if "All" in request.args.get('politician_select_mode_compare', '') and not df_all_for_selection.empty: # Renamed
+                ids_for_calc = df_all_for_selection['politician_id'].head(MAX_HEATMAP_POLITICIANS_CONST).tolist()
+            else: 
+                ids_for_calc = selected_politician_ids
+            
+            compare_data_dict['selected_politician_ids'] = selected_politician_ids
             if ids_for_calc:
                 df_word_counts = fetch_word_counts_per_politician(engine, politician_ids_list=ids_for_calc)
                 if not df_word_counts.empty and 'politician_name' in df_word_counts.columns:
@@ -602,19 +597,19 @@ def dashboard():
                     if len(valid_politicians) > 1:
                         names_for_matrix = valid_politicians
                         vectors_for_matrix = np.array([politician_vectors[name] for name in names_for_matrix])
-                        sim_matrix = cosine_similarity(vectors_for_matrix)
-                        sim_df = pd.DataFrame(sim_matrix, index=names_for_matrix, columns=names_for_matrix)
+                        comp_matrix = cosine_similarity(vectors_for_matrix)
+                        comp_df = pd.DataFrame(comp_matrix, index=names_for_matrix, columns=names_for_matrix)
                         original_name_order = df_all_for_selection[df_all_for_selection['politician_id'].isin(ids_for_calc)]['politician_name'].tolist()
-                        ordered_names_in_matrix = [name for name in original_name_order if name in sim_df.index]
-                        if ordered_names_in_matrix: sim_df = sim_df.reindex(index=ordered_names_in_matrix, columns=ordered_names_in_matrix)
-                        heatmap_buf = plot_similarity_heatmap_to_image(sim_df, title="Semantic Similarity Heatmap", cbar_label="Cosine Similarity of Word Collections (0-1)")
-                        similarity_data_dict['heatmap_img_base64'] = get_image_as_base64(heatmap_buf)
-                        similarity_data_dict['similarity_df_html'] = sim_df.style.format("{:.3f}").to_html(classes='styled-table', border=0)
-                        similarity_data_dict['df_for_similarity_calc'] = sim_df
-                    else: similarity_data_dict['error_message'] = "Could not generate meaningful semantic profiles for more than one selected politician."
-                else: similarity_data_dict['error_message'] = "No word data found for the selected politician(s)."
+                        ordered_names_in_matrix = [name for name in original_name_order if name in comp_df.index]
+                        if ordered_names_in_matrix: comp_df = comp_df.reindex(index=ordered_names_in_matrix, columns=ordered_names_in_matrix)
+                        heatmap_buf = plot_comparison_heatmap_to_image(comp_df, title="Semantic Comparison Heatmap", cbar_label="Cosine Similarity of Word Collections (0-1)")
+                        compare_data_dict['heatmap_img_base64'] = get_image_as_base64(heatmap_buf)
+                        compare_data_dict['comparison_df_html'] = comp_df.style.format("{:.3f}").to_html(classes='styled-table', border=0)
+                        compare_data_dict['df_for_comparison_calc'] = comp_df
+                    else: compare_data_dict['error_message'] = "Could not generate meaningful semantic profiles for more than one selected politician."
+                else: compare_data_dict['error_message'] = "No word data found for the selected politician(s)."
             else:
-                if not similarity_data_dict.get('error_message'): similarity_data_dict['error_message'] = "No politicians selected for similarity analysis."
+                if not compare_data_dict.get('error_message'): compare_data_dict['error_message'] = "No politicians selected for comparison analysis."
 
     elif active_tab == 'overview':
         metrics = fetch_dataset_metrics(engine)
@@ -643,10 +638,8 @@ def dashboard():
 
     return render_template('index.html',
                            active_tab=active_tab,
-                           sentiment_data=sentiment_tab_data,
-                           approval_data=approval_tab_data,
-                           top_word_data=top_word_tab_data,
-                           similarity_data=similarity_data_dict,
+                           lookup_data=lookup_tab_data,
+                           compare_data=compare_data_dict, # Renamed from similarity_data
                            overview_data=overview_tab_data,
                            feed_data=feed_data_dict,
                            engine_available=bool(engine))
