@@ -78,7 +78,7 @@
         </div>
 
     {% elif active_tab == 'lookup' %}
-        {# --- START: UPDATED LOOKUP TAB --- #}
+        {# This block remains unchanged #}
         <div class="tab-content-container">
             <section id="lookup-content">
                 <h2>Politician Lookup</h2>
@@ -178,7 +178,7 @@
         {# --- END: UPDATED LOOKUP TAB --- #}
 
     {% elif active_tab == 'compare' %}
-        {# --- START: RENAMED & UPDATED COMPARE TAB --- #}
+        {# This block remains unchanged #}
         <div class="tab-content-container">
             <section id="semantic-comparison-content">
                 <h2>Semantic Comparison</h2>
@@ -233,12 +233,24 @@
         {# --- END: RENAMED & UPDATED COMPARE TAB --- #}
         
     {% elif active_tab == 'feed' %}
-        {# This block remains unchanged #}
+        <!-- ===== START: MODIFIED FEED TAB ===== -->
         <div class="tab-content-container">
              <section id="feed-content">
                 <h2>Activity Feed</h2>
-                <p>Submissions recorded from <strong>{{ feed_data.feed_display_period_start }}</strong> to <strong>{{ feed_data.feed_display_period_end }}</strong>, along with the sentiment score of the word used.</p>
 
+                <!-- Activity Graph Section -->
+                {% if feed_data.activity_graph_img_base64 %}
+                    <div class="content-block chart-container" style="margin-bottom: 2.5rem; padding: 1rem; background-color: #fdfdfd; border: 1px solid #ddd; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <img src="data:image/png;base64,{{ feed_data.activity_graph_img_base64 }}" alt="Daily Activity Graph" style="width: 100%; height: auto; display: block;">
+                    </div>
+                {% else %}
+                    <div class="content-block info-message" style="margin-bottom: 2.5rem; text-align: center;">
+                        <p>Activity graph could not be generated (not enough data in the last 90 days).</p>
+                    </div>
+                {% endif %}
+
+                <!-- Recent Submissions Table -->
+                <p>Recent submissions from <strong>{{ feed_data.feed_display_period_start }}</strong> to <strong>{{ feed_data.feed_display_period_end }}</strong>, along with the sentiment score of the word used.</p>
                 {% if feed_data and feed_data.latest_feed_items %}
                     <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 800px;">
                         <table class="styled-table data-table feed-table">
@@ -269,6 +281,7 @@
                 {% endif %}
             </section>
         </div>
+        <!-- ===== END: MODIFIED FEED TAB ===== -->
     {% endif %}
 {% endblock %}
 

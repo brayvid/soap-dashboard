@@ -219,6 +219,44 @@ def fetch_weekly_approval_rating(_engine, politician_ids_list):
         app.logger.error(f"Error in fetch_weekly_approval_rating: {e}\nQuery: {query}")
         return pd.DataFrame()
 
+# --- NEW FUNCTION START ---
+def fetch_daily_activity(_engine):
+    """Fetches daily counts of word submissions and new politician additions."""
+    if not _engine: return pd.DataFrame()
+
+    submissions_query = text("""
+        SELECT DATE(created_at) AS activity_date, COUNT(vote_id) AS submission_count
+        FROM votes WHERE created_at IS NOT NULL GROUP BY activity_date;
+    """)
+    additions_query = text("""
+        SELECT DATE(created_at) AS activity_date, COUNT(politician_id) AS addition_count
+        FROM politicians WHERE created_at IS NOT NULL GROUP BY activity_date;
+    """)
+
+    try:
+        with _engine.connect() as connection:
+            submissions_df = pd.read_sql(submissions_query, connection)
+            additions_df = pd.read_sql(additions_query, connection)
+
+        for df in [submissions_df, additions_df]:
+            if not df.empty:
+                df['activity_date'] = pd.to_datetime(df['activity_date'])
+
+        if submissions_df.empty and additions_df.empty:
+            return pd.DataFrame(columns=['activity_date', 'submission_count', 'addition_count'])
+
+        activity_df = pd.merge(submissions_df, additions_df, on='activity_date', how='outer')
+        activity_df.fillna(0, inplace=True)
+        activity_df['submission_count'] = activity_df['submission_count'].astype(int)
+        activity_df['addition_count'] = activity_df['addition_count'].astype(int)
+        activity_df.sort_values('activity_date', inplace=True)
+        return activity_df
+
+    except Exception as e:
+        app.logger.error(f"Error in fetch_daily_activity: {e}")
+        return pd.DataFrame()
+# --- NEW FUNCTION END ---
+
 def fetch_dataset_metrics(_engine):
     metric_keys = [
         "total_politicians", "total_words_scorable", "total_votes", "votes_date_range",
@@ -454,6 +492,65 @@ def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, yl
     img_buf = BytesIO(); fig.savefig(img_buf, format="png", bbox_inches='tight', dpi=100); img_buf.seek(0)
     plt.close(fig); return img_buf
 
+# --- NEW FUNCTION START ---
+def plot_daily_activity_to_image(df):
+    """Generates a dual-axis bar chart for daily submissions and additions."""
+    import matplotlib.dates as mdates
+    if df.empty or ('submission_count' not in df.columns and 'addition_count' not in df.columns):
+        return None
+
+    # Filter data to the last 90 days for clarity, or last 30 entries if no recent data
+    df_filtered = df[df['activity_date'] >= (datetime.datetime.now() - datetime.timedelta(days=90))]
+    if df_filtered.empty:
+        df_filtered = df.tail(30)
+        if df_filtered.empty: return None
+
+    fig, ax1 = plt.subplots(figsize=(15, 7))
+    bar_width = 0.4
+    dates = df_filtered['activity_date']
+    x_pos = mdates.date2num(dates)
+
+    # Left Y-Axis: Word Submissions
+    color1 = 'skyblue'
+    ax1.set_ylabel('Word Submissions', color=color1, fontsize=12, weight='bold')
+    ax1.bar(x_pos - bar_width/2, df_filtered['submission_count'], width=bar_width, color=color1, label='Word Submissions')
+    ax1.tick_params(axis='y', labelcolor=color1)
+    max_submissions = df_filtered['submission_count'].max()
+    ax1.set_ylim(0, max(10, max_submissions * 1.1))
+    ax1.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    ax1.spines['top'].set_visible(False)
+
+    # Right Y-Axis: Politician Additions
+    ax2 = ax1.twinx()
+    color2 = 'salmon'
+    ax2.set_ylabel('Politician Additions', color=color2, fontsize=12, weight='bold')
+    ax2.bar(x_pos + bar_width/2, df_filtered['addition_count'], width=bar_width, color=color2, label='Politician Additions')
+    ax2.tick_params(axis='y', labelcolor=color2)
+    max_additions = df_filtered['addition_count'].max()
+    ax2.set_ylim(0, max(5, max_additions * 1.2))
+    ax2.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    ax2.spines['top'].set_visible(False)
+
+    # Formatting and Labels
+    ax1.set_title('Daily Activity: Submissions & Politician Additions (Last 90 Days)', fontsize=16, weight='bold', pad=20)
+    ax1.set_xlabel('Date', fontsize=12)
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    fig.autofmt_xdate(rotation=30, ha='right')
+    ax1.grid(True, axis='y', linestyle='--', alpha=0.7)
+
+    # Unified Legend
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, loc='upper left')
+
+    plt.tight_layout()
+    img_buf = BytesIO()
+    fig.savefig(img_buf, format="png", dpi=100, bbox_inches='tight')
+    img_buf.seek(0)
+    plt.close(fig)
+    return img_buf
+# --- NEW FUNCTION END ---
+
 def plot_comparison_heatmap_to_image(comparison_matrix_df, title="Comparison Matrix", cbar_label="Cosine Similarity"):
     if comparison_matrix_df.empty or len(comparison_matrix_df) < 2: return None
     plot_df = comparison_matrix_df.copy()
@@ -481,9 +578,9 @@ def get_image_as_base64(img_buf):
 def dashboard():
     if not engine:
         return render_template('error.html', message="CRITICAL: Database connection failed. Dashboard cannot operate.")
-    
+
     active_tab = request.args.get('tab', 'overview')
-    
+
     politicians_list_df = fetch_politicians_list(engine)
 
     lookup_tab_data = {}
@@ -496,7 +593,7 @@ def dashboard():
         selected_politician_ids_str = request.args.getlist('politician_ids_lookup')
         select_all_mode = "All" in request.args.get('politician_select_mode_lookup', '')
         MAX_LOOKUP_POLITICIANS_CONST = 30
-        
+
         selected_politician_ids = []
 
         if select_all_mode:
@@ -508,7 +605,7 @@ def dashboard():
             if not politicians_by_votes_df.empty:
                 num_to_select = min(5, len(politicians_by_votes_df))
                 selected_politician_ids = politicians_by_votes_df['politician_id'].head(num_to_select).tolist()
-        
+
         ids_for_query = selected_politician_ids
         selected_politician_names = []
         if ids_for_query and not politicians_list_df.empty:
@@ -538,7 +635,7 @@ def dashboard():
                 df_scores_raw.sort_values('politician_name', inplace=True)
                 histogram_buf = plot_multi_sentiment_histograms_to_image(df_scores_raw, num_bins=12)
                 lookup_tab_data['histogram_img_base64'] = get_image_as_base64(histogram_buf)
-            
+
             top_word_tables_list = []
             for pid in selected_politician_ids:
                 pname = politicians_list_df[politicians_list_df['politician_id'] == pid]['name'].iloc[0]
@@ -549,7 +646,7 @@ def dashboard():
                     for item in top_words_list_for_template:
                         if 'Week Start Date' in item and hasattr(item['Week Start Date'], 'strftime'):
                             item['Week Start Date'] = item['Week Start Date'].strftime('%Y-%m-%d')
-                
+
                 top_word_tables_list.append({
                     'politician_name': pname,
                     'top_words_list': top_words_list_for_template
@@ -567,18 +664,18 @@ def dashboard():
             if not df_all_for_selection.empty:
                 df_form_list = df_all_for_selection.sort_values('politician_name', ascending=True)
                 compare_data_dict['available_politicians'] = df_form_list[['politician_id', 'politician_name']].to_dict(orient='records')
-            
+
             selected_politician_ids_str = request.args.getlist('politician_ids_compare') # Renamed
             selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
-            
-            if not selected_politician_ids_str and not df_all_for_selection.empty: 
+
+            if not selected_politician_ids_str and not df_all_for_selection.empty:
                 selected_politician_ids = df_all_for_selection['politician_id'].head(min(5, len(df_all_for_selection))).tolist()
-            
+
             if "All" in request.args.get('politician_select_mode_compare', '') and not df_all_for_selection.empty: # Renamed
                 ids_for_calc = df_all_for_selection['politician_id'].head(MAX_HEATMAP_POLITICIANS_CONST).tolist()
-            else: 
+            else:
                 ids_for_calc = selected_politician_ids
-            
+
             compare_data_dict['selected_politician_ids'] = selected_politician_ids
             if ids_for_calc:
                 df_word_counts = fetch_word_counts_per_politician(engine, politician_ids_list=ids_for_calc)
@@ -616,11 +713,22 @@ def dashboard():
         overview_tab_data = {'metrics': metrics}
 
     elif active_tab == 'feed':
+        # --- MODIFICATION START ---
+        # Fetch data for the activity graph and generate the plot
+        daily_activity_df = fetch_daily_activity(engine)
+        activity_graph_img_base64 = None
+        if not daily_activity_df.empty:
+            activity_graph_buf = plot_daily_activity_to_image(daily_activity_df)
+            activity_graph_img_base64 = get_image_as_base64(activity_graph_buf)
+
+        # Fetch data for the feed table
         today = datetime.date.today()
-        query_end_date = today; query_start_date = today - datetime.timedelta(days=6)
+        query_end_date = today
+        query_start_date = today - datetime.timedelta(days=6)
         start_dt_feed = datetime.datetime.combine(query_start_date, datetime.time.min)
         end_dt_feed = datetime.datetime.combine(query_end_date, datetime.time.max)
         feed_df = fetch_feed_updates(engine, start_dt_feed, end_dt_feed)
+        
         feed_list_for_template = []
         if not feed_df.empty:
             feed_list_for_template = feed_df.to_dict(orient='records')
@@ -630,11 +738,15 @@ def dashboard():
                     try: item['Sentiment'] = f"{float(item['Sentiment']):.2f}"
                     except (ValueError, TypeError): item['Sentiment'] = "N/A"
                 elif 'Sentiment' in item and pd.isna(item['Sentiment']): item['Sentiment'] = "N/A"
+        
         feed_data_dict = {
+            'activity_graph_img_base64': activity_graph_img_base64, # Pass graph to template
             'latest_feed_items': feed_list_for_template,
             'feed_display_period_start': query_start_date.strftime('%Y-%m-%d'),
             'feed_display_period_end': query_end_date.strftime('%Y-%m-%d')
-            }
+        }
+        # --- MODIFICATION END ---
+
 
     return render_template('index.html',
                            active_tab=active_tab,
