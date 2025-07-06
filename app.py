@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv() # Load .env before other imports that might use env vars
 
 import os
-from flask import Flask, render_template, request, url_for, send_from_directory, jsonify
+from flask import Flask, render_template, request, url_for, send_from_directory, jsonify, redirect
 import pandas as pd
 from sqlalchemy import create_engine, text
 import matplotlib.pyplot as plt
@@ -25,6 +25,17 @@ from flask_assets import Environment, Bundle
 
 app = Flask(__name__)
 
+@app.before_request
+def redirect_to_www():
+    # Only redirect if the app is in PRODUCTION environment
+    if os.environ.get('DEPLOY_ENV') == 'PRODUCTION':
+        # Check if the request is on the apex domain and not a health check
+        if request.host == 'dash.soap.fyi' and request.path != '/healthz':
+            # Construct the new URL with 'www'
+            new_url = request.url.replace('://dash.soap.fyi', '://www.dash.soap.fyi', 1)
+            # Redirect permanently
+            return redirect(new_url, code=301)
+        
 # --- SPEED OPTIMIZATIONS START ---
 Compress(app)
 assets = Environment(app)
