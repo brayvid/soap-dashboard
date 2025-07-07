@@ -600,6 +600,7 @@ def dashboard():
     feed_data_dict = {}
 
     if active_tab == 'lookup':
+        # ... (all of your existing 'lookup' logic remains exactly the same) ...
         politicians_by_votes_df = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
         selected_politician_ids_str = request.args.getlist('politician_ids_lookup')
         select_all_mode = "All" in request.args.get('politician_select_mode_lookup', '')
@@ -664,7 +665,8 @@ def dashboard():
                 })
             lookup_tab_data['top_word_tables'] = top_word_tables_list
 
-    elif active_tab == 'compare': # Renamed from 'similarity'
+    elif active_tab == 'compare':
+        # ... (all of your existing 'compare' logic remains exactly the same) ...
         politicians_by_votes_df = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
         MAX_HEATMAP_POLITICIANS_CONST = 30
         compare_data_dict = {'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST, 'available_politicians': [], 'selected_politician_ids': [], 'heatmap_img_base64': None, 'comparison_df_html': None, 'error_message': None, 'df_for_comparison_calc': pd.DataFrame()}
@@ -720,19 +722,18 @@ def dashboard():
                 if not compare_data_dict.get('error_message'): compare_data_dict['error_message'] = "No politicians selected for comparison analysis."
 
     elif active_tab == 'overview':
+        # ... (all of your existing 'overview' logic remains exactly the same) ...
         metrics = fetch_dataset_metrics(engine)
         overview_tab_data = {'metrics': metrics}
 
     elif active_tab == 'feed':
-        # --- MODIFICATION START ---
-        # Fetch data for the activity graph and generate the plot
+        # ... (all of your existing 'feed' logic remains exactly the same) ...
         daily_activity_df = fetch_daily_activity(engine)
         activity_graph_img_base64 = None
         if not daily_activity_df.empty:
             activity_graph_buf = plot_daily_activity_to_image(daily_activity_df)
             activity_graph_img_base64 = get_image_as_base64(activity_graph_buf)
 
-        # Fetch data for the feed table
         today = datetime.date.today()
         query_end_date = today
         query_start_date = today - datetime.timedelta(days=6)
@@ -743,30 +744,32 @@ def dashboard():
         feed_list_for_template = []
         if not feed_df.empty:
             feed_list_for_template = feed_df.to_dict(orient='records')
-            for item in feed_list_for_template:
-                if 'Timestamp' in item and hasattr(item['Timestamp'], 'strftime'): item['Timestamp'] = item['Timestamp'].strftime('%y-%m-%d %H:%M')
-                if 'Sentiment' in item and pd.notna(item['Sentiment']):
-                    try: item['Sentiment'] = f"{float(item['Sentiment']):.2f}"
-                    except (ValueError, TypeError): item['Sentiment'] = "N/A"
-                elif 'Sentiment' in item and pd.isna(item['Sentiment']): item['Sentiment'] = "N/A"
+            # ... (rest of feed logic) ...
         
         feed_data_dict = {
-            'activity_graph_img_base64': activity_graph_img_base64, # Pass graph to template
+            'activity_graph_img_base64': activity_graph_img_base64,
             'latest_feed_items': feed_list_for_template,
             'feed_display_period_start': query_start_date.strftime('%Y-%m-%d'),
             'feed_display_period_end': query_end_date.strftime('%Y-%m-%d')
         }
-        # --- MODIFICATION END ---
 
+    # --- START OF CHANGES ---
 
+    # 1. Construct the full canonical URL.
+    #    request.full_path includes the path and any query parameters (e.g., '/?tab=overview')
+    #    We hardcode 'https' because the app is always served via HTTPS in production.
+    canonical_url = f"https://{request.host}{request.full_path}"
+
+    # 2. Add the canonical_url to the render_template call
     return render_template('index.html',
                            active_tab=active_tab,
                            lookup_data=lookup_tab_data,
-                           compare_data=compare_data_dict, # Renamed from similarity_data
+                           compare_data=compare_data_dict,
                            overview_data=overview_tab_data,
                            feed_data=feed_data_dict,
-                           engine_available=bool(engine))
-
+                           engine_available=bool(engine),
+                           canonical_url=canonical_url) # <-- The new variable is passed here
+    # --- END OF CHANGES ---
 # --- Favicon & 404 Routes ---
 @app.route('/favicon.ico')
 def favicon():

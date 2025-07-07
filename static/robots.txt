@@ -1,16 +1,9 @@
-# This robots.txt file applies to all subdomains of soap.fyi
-
+# robots.txt for dash.soap.fyi
 User-agent: *
 
-# Disallow crawling of internal API endpoints and data files
-Disallow: /politician/*/data
-Disallow: /data/
-Disallow: /words
-Disallow: /sentiment
-Disallow: /politicians
-
-# Disallow crawling of the health check endpoint
+# Disallow crawling of the health check endpoint. It has no value for search users.
 Disallow: /healthz
 
-# Sitemap locations for all parts of the site
-Sitemap: https://dash.soap.fyi/sitemap.xml
+# Location of the XML Sitemap for this dashboard.
+# Use the full canonical URL.
+Sitemap: https://www.dash.soap.fyi/sitemap.xml

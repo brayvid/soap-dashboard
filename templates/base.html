@@ -6,8 +6,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Dashboard for analyzing political sentiment and trends.">
     
+    <!-- SEO Meta Description -->
+    <meta name="description" content="Explore real-time political sentiment. Our live dashboard tracks politician approval ratings and public perception using unique, crowdsourced word association data.">
+    
+    <!-- Canonical URL Tag: Tells search engines the single, authoritative URL for this page -->
+    <link rel="canonical" href="{{ canonical_url }}">
+
     <title>Soap | Dashboard</title>
     
     <link rel="icon" href="{{ url_for('favicon') }}" type="image/x-icon">
@@ -16,9 +21,10 @@
 
     {# 2. INLINE CRITICAL CSS: Paste the minimal CSS needed for the above-the-fold content here. #}
     <style>
-      /* Generate this using an online tool. This is a placeholder. */
-      body { font-family: 'Inter', sans-serif; background-color: #fff; color: #212529; }
-      .navbar { display: flex; justify-content: space-between; padding: 1rem; }
+      /* This is a placeholder for your critical CSS. */
+      body { font-family: 'Inter', sans-serif; background-color: #fff; color: #212529; display: flex; flex-direction: column; min-height: 100vh; margin: 0;}
+      .navbar { display: flex; justify-content: space-between; padding: 1rem; border-bottom: 1px solid #e9ecef;}
+      .footer { text-align: center; padding: 1rem; margin-top: auto; font-size: 0.9rem; color: #6c757d; }
     </style>
 
     {# 3. LOAD FULL STYLESHEET ASYNCHRONOUSLY using the Flask-Assets bundle we created. #}
@@ -39,13 +45,13 @@
 </head>
 <body>
     <!-- Navbar - matching your new index.html structure -->
-<nav class="navbar">
-    <a href="https://www.use.soap.fyi">Home</a>
-    <div class="navbar-title">Soap Dashboard</div>
-    <div class="navbar-right-menu">
-        <a href="/">Dash</a>
-    </div>
-</nav>
+    <nav class="navbar">
+        <a href="https://www.use.soap.fyi">Home</a>
+        <div class="navbar-title">Soap Dashboard</div>
+        <div class="navbar-right-menu">
+            <a href="/">Dash</a>
+        </div>
+    </nav>
 
     <!-- Main content area -->
     <div class="main-content-wrapper" style="padding: 1rem; flex-grow: 1;">
@@ -64,7 +70,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <p>&copy; Copyright 2024-<span id="currentYear"></span> <a class="footer-link" href="https://www.soap.fyi">soap.fyi</a><br>All rights reserved. <a class="footer-link" href="https://www.soap.fyi/terms">Terms & Conditions</a></p>
+        <p>© Copyright 2024-<span id="currentYear"></span> <a class="footer-link" href="https://www.soap.fyi">soap.fyi</a><br>All rights reserved. <a class="footer-link" href="https://www.soap.fyi/terms">Terms & Conditions</a></p>
     </footer>
     <script>
     // Get the current year
@@ -86,24 +92,11 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize slider values on page load if the slider is present
-            // This code will run on every page, but only act if the elements exist.
-            
-            // For sentiment Tab Slider (if it exists on the current page)
             const sentimentSlider = document.getElementById('min_votes_slider_sentiment');
             const sentimentOutput = document.getElementById('slider_value_sentiment');
             if (sentimentSlider && sentimentOutput) {
                 sentimentOutput.innerHTML = sentimentSlider.value;
-                // No need for active_tab check here if the element IDs are unique
-                // and only appear on the sentiment tab's content.
             }
-
-            // If you have other sliders on other tabs, add their initialization here:
-            // Example:
-            // const trendsSlider = document.getElementById('some_other_slider_id_for_trends');
-            // const trendsOutput = document.getElementById('some_other_output_id_for_trends');
-            // if (trendsSlider && trendsOutput) {
-            //     trendsOutput.innerHTML = trendsSlider.value;
-            // }
         });
     </script>
     {% endblock %}
