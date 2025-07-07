@@ -385,13 +385,23 @@ def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
         with _engine.connect() as connection:
             df = pd.read_sql(query, connection, params={'start_date': start_date_dt, 'end_date': end_date_dt})
         if not df.empty:
-            if 'Timestamp' in df.columns: df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-            if 'Word' in df.columns: df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
-            if 'Sentiment' in df.columns: df['Sentiment'] = pd.to_numeric(df['Sentiment'], errors='coerce')
+            if 'Timestamp' in df.columns:
+                # First, ensure the column is a proper datetime object
+                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+                # --- ADD THIS LINE TO FORMAT THE DATE ---
+                df['Timestamp'] = df['Timestamp'].dt.strftime('%Y-%m-%d')
+                # --- END OF ADDITION ---
+
+            if 'Word' in df.columns:
+                df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+            if 'Sentiment' in df.columns:
+                df['Sentiment'] = pd.to_numeric(df['Sentiment'], errors='coerce')
+            
             for col in df_cols:
                 if col not in df.columns: df[col] = pd.NA
             df = df[df_cols]
-        else: df = pd.DataFrame(columns=df_cols)
+        else:
+            df = pd.DataFrame(columns=df_cols)
         return df
     except Exception as e:
         app.logger.error(f"Error fetching feed updates: {e}\nQuery: {query}")
