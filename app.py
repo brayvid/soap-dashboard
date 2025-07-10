@@ -89,7 +89,7 @@ def get_engine():
         return None
 engine = get_engine()
 
-# --- Data Fetching Functions (No changes needed in these functions) ---
+# --- Data Fetching Functions ---
 def fetch_politicians_list(_engine):
     if not _engine: return pd.DataFrame({'politician_id': [], 'name': []})
     query = text("SELECT politician_id, name FROM politicians ORDER BY name ASC;")
@@ -230,7 +230,6 @@ def fetch_weekly_approval_rating(_engine, politician_ids_list):
         app.logger.error(f"Error in fetch_weekly_approval_rating: {e}\nQuery: {query}")
         return pd.DataFrame()
 
-# --- NEW FUNCTION START ---
 def fetch_daily_activity(_engine):
     """Fetches daily counts of word submissions and new politician additions."""
     if not _engine: return pd.DataFrame()
@@ -266,8 +265,8 @@ def fetch_daily_activity(_engine):
     except Exception as e:
         app.logger.error(f"Error in fetch_daily_activity: {e}")
         return pd.DataFrame()
-# --- NEW FUNCTION END ---
 
+# --- START OF MODIFIED FUNCTION ---
 def fetch_dataset_metrics(_engine):
     metric_keys = [
         "total_politicians", "total_words_scorable", "total_votes", "votes_date_range",
@@ -327,49 +326,73 @@ def fetch_dataset_metrics(_engine):
                     if hi_rated: metrics["highest_rated_politician"] = ", ".join(hi_rated)
                     if lo_rated: metrics["lowest_rated_politician"] = ", ".join(lo_rated)
             except Exception as e: app.logger.error(f"Error fetching politician_ratings: {e}")
+
+            # --- START: New logic for extreme word attribution ---
             try:
                 extreme_words_query = text("""
-                    SELECT word, sentiment_score FROM words WHERE sentiment_score = (SELECT MAX(sentiment_score) FROM words)
-                    UNION ALL
-                    SELECT word, sentiment_score FROM words WHERE sentiment_score = (SELECT MIN(sentiment_score) FROM words);
+                    SELECT word, sentiment_score FROM words WHERE sentiment_score IS NOT NULL AND (
+                        sentiment_score = (SELECT MAX(sentiment_score) FROM words WHERE sentiment_score IS NOT NULL)
+                        OR
+                        sentiment_score = (SELECT MIN(sentiment_score) FROM words WHERE sentiment_score IS NOT NULL)
+                    );
                 """)
-                extreme_words = connection.execute(extreme_words_query).fetchall()
-                if extreme_words:
-                    max_score = max(w.sentiment_score for w in extreme_words)
-                    min_score = min(w.sentiment_score for w in extreme_words)
-                    positive_words = [w.word for w in extreme_words if w.sentiment_score == max_score]
-                    negative_words = [w.word for w in extreme_words if w.sentiment_score == min_score]
-                    attribution_query = text("""
-                        WITH AttributionCounts AS (
-                            SELECT p.name, COUNT(v.vote_id) as use_count,
-                            RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) as rnk
+                extreme_words_res = connection.execute(extreme_words_query).fetchall()
+
+                if extreme_words_res:
+                    # Find the actual max/min scores from the results
+                    all_scores = [w.sentiment_score for w in extreme_words_res]
+                    max_score = max(all_scores)
+                    min_score = min(all_scores)
+
+                    # Get lists of words for each extreme score
+                    positive_words = [w.word for w in extreme_words_res if w.sentiment_score == max_score]
+                    negative_words = [w.word for w in extreme_words_res if w.sentiment_score == min_score]
+                    all_extreme_words_list = positive_words + negative_words
+
+                    if all_extreme_words_list:
+                        # Fetch all politicians for all extreme words in one query
+                        attribution_query = text("""
+                            SELECT
+                                w.word,
+                                p.name as politician_name
                             FROM votes v
                             JOIN politicians p ON v.politician_id = p.politician_id
                             JOIN words w ON v.word_id = w.word_id
-                            WHERE w.word = :word
-                            GROUP BY p.name
-                        )
-                        SELECT name FROM AttributionCounts WHERE rnk = 1 LIMIT 1;
-                    """)
-                    pos_attributions = []
-                    for word in positive_words:
-                        top_politician = connection.execute(attribution_query, {'word': word}).scalar_one_or_none()
-                        if top_politician:
-                            pos_attributions.append(f"{top_politician}: {word.capitalize()} ({max_score:+.2f})")
-                    if pos_attributions:
-                        metrics["most_positive_word_attribution"] = ", ".join(pos_attributions)
-                    neg_attributions = []
-                    for word in negative_words:
-                        top_politician = connection.execute(attribution_query, {'word': word}).scalar_one_or_none()
-                        if top_politician:
-                            neg_attributions.append(f"{top_politician}: {word.capitalize()} ({min_score:+.2f})")
-                    if neg_attributions:
-                        metrics["most_negative_word_attribution"] = ", ".join(neg_attributions)
-            except Exception as e: app.logger.error(f"Error fetching extreme word attribution: {e}")
+                            WHERE w.word IN :word_list
+                            GROUP BY w.word, p.name
+                            ORDER BY w.word, COUNT(v.vote_id) DESC
+                        """)
+                        attribution_df = pd.read_sql(attribution_query, connection, params={'word_list': tuple(all_extreme_words_list)})
+
+                        # Process positive words
+                        pos_attributions = []
+                        for word in sorted(positive_words): # Sort for consistent output
+                            politicians_for_word = attribution_df[attribution_df['word'] == word]['politician_name'].tolist()
+                            if politicians_for_word:
+                                politician_str = ", ".join(politicians_for_word)
+                                pos_attributions.append(f"{word.capitalize()} ({max_score:+.2f}): {politician_str}")
+                        if pos_attributions:
+                            metrics["most_positive_word_attribution"] = "; ".join(pos_attributions)
+
+                        # Process negative words
+                        neg_attributions = []
+                        for word in sorted(negative_words): # Sort for consistent output
+                            politicians_for_word = attribution_df[attribution_df['word'] == word]['politician_name'].tolist()
+                            if politicians_for_word:
+                                politician_str = ", ".join(politicians_for_word)
+                                neg_attributions.append(f"{word.capitalize()} ({min_score:+.2f}): {politician_str}")
+                        if neg_attributions:
+                            metrics["most_negative_word_attribution"] = "; ".join(neg_attributions)
+
+            except Exception as e:
+                app.logger.error(f"Error fetching extreme word attribution: {e}")
+            # --- END: New logic for extreme word attribution ---
+
     except Exception as e:
         app.logger.error(f"Major error in fetch_dataset_metrics: {e}")
         return {key: "Error" for key in metric_keys}
     return metrics
+# --- END OF MODIFIED FUNCTION ---
 
 def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
     df_cols = ["Timestamp", "Politician", "Word", "Sentiment"]
@@ -386,12 +409,8 @@ def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
             df = pd.read_sql(query, connection, params={'start_date': start_date_dt, 'end_date': end_date_dt})
         if not df.empty:
             if 'Timestamp' in df.columns:
-                # First, ensure the column is a proper datetime object
                 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-                # --- ADD THIS LINE TO FORMAT THE DATE ---
                 df['Timestamp'] = df['Timestamp'].dt.strftime('%Y-%m-%d')
-                # --- END OF ADDITION ---
-
             if 'Word' in df.columns:
                 df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
             if 'Sentiment' in df.columns:
@@ -406,8 +425,6 @@ def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
     except Exception as e:
         app.logger.error(f"Error fetching feed updates: {e}\nQuery: {query}")
         return pd.DataFrame(columns=df_cols)
-
-DEFAULT_TRUMP_ID = 1
 
 def fetch_top_weekly_word_for_politician(_engine, politician_id):
     df_cols = ["Week (YYYY-IW)", "Week Start Date", "Top Word Used", "Votes for Top Word", "Total Votes This Week"]
@@ -448,7 +465,7 @@ def fetch_top_weekly_word_for_politician(_engine, politician_id):
         return pd.DataFrame(columns=df_cols)
 
 
-# --- Plotting Functions (Changes applied here) ---
+# --- Plotting Functions ---
 SENTIMENT_COLORMAP = LinearSegmentedColormap.from_list("sentiment_spectrum", [
     (0.0,    '#DE3B3B'), (0.475,  '#CDb14c'), (0.475,  '#BFBFBF'), (0.525,  '#BFBFBF'),
     (0.525,  '#9fad42'), (1.0,    '#2a8d64')
@@ -513,14 +530,12 @@ def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, yl
     img_buf = BytesIO(); fig.savefig(img_buf, format="png", bbox_inches='tight', dpi=100); img_buf.seek(0)
     plt.close(fig); return img_buf
 
-# --- NEW FUNCTION START ---
 def plot_daily_activity_to_image(df):
     """Generates a dual-axis bar chart for daily submissions and additions."""
     import matplotlib.dates as mdates
     if df.empty or ('submission_count' not in df.columns and 'addition_count' not in df.columns):
         return None
 
-    # Filter data to the last 90 days for clarity, or last 30 entries if no recent data
     df_filtered = df[df['activity_date'] >= (datetime.datetime.now() - datetime.timedelta(days=90))]
     if df_filtered.empty:
         df_filtered = df.tail(30)
@@ -531,7 +546,6 @@ def plot_daily_activity_to_image(df):
     dates = df_filtered['activity_date']
     x_pos = mdates.date2num(dates)
 
-    # Left Y-Axis: Word Submissions
     color1 = 'skyblue'
     ax1.set_ylabel('Word Submissions', color=color1, fontsize=12, weight='bold')
     ax1.bar(x_pos - bar_width/2, df_filtered['submission_count'], width=bar_width, color=color1, label='Word Submissions')
@@ -541,7 +555,6 @@ def plot_daily_activity_to_image(df):
     ax1.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax1.spines['top'].set_visible(False)
 
-    # Right Y-Axis: Politician Additions
     ax2 = ax1.twinx()
     color2 = 'salmon'
     ax2.set_ylabel('Politician Additions', color=color2, fontsize=12, weight='bold')
@@ -552,14 +565,12 @@ def plot_daily_activity_to_image(df):
     ax2.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax2.spines['top'].set_visible(False)
 
-    # Formatting and Labels
     ax1.set_title('Daily Activity: Submissions & Politician Additions (Last 90 Days)', fontsize=16, weight='bold', pad=20)
     ax1.set_xlabel('Date', fontsize=12)
     ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
     fig.autofmt_xdate(rotation=30, ha='right')
     ax1.grid(True, axis='y', linestyle='--', alpha=0.7)
 
-    # Unified Legend
     lines, labels = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax2.legend(lines + lines2, labels + labels2, loc='upper left')
@@ -570,7 +581,6 @@ def plot_daily_activity_to_image(df):
     img_buf.seek(0)
     plt.close(fig)
     return img_buf
-# --- NEW FUNCTION END ---
 
 def plot_comparison_heatmap_to_image(comparison_matrix_df, title="Comparison Matrix", cbar_label="Cosine Similarity"):
     if comparison_matrix_df.empty or len(comparison_matrix_df) < 2: return None
@@ -594,7 +604,7 @@ def get_image_as_base64(img_buf):
         return base64.b64encode(img_buf.read()).decode('utf-8')
     return None
 
-# --- Main Dashboard Route (REFACTORED with changes) ---
+# --- Main Dashboard Route ---
 @app.route('/')
 def dashboard():
     if not engine:
@@ -605,19 +615,16 @@ def dashboard():
     politicians_list_df = fetch_politicians_list(engine)
 
     lookup_tab_data = {}
-    compare_data_dict = {} # Renamed from similarity_data_dict
+    compare_data_dict = {}
     overview_tab_data = {}
     feed_data_dict = {}
 
     if active_tab == 'lookup':
-        # ... (all of your existing 'lookup' logic remains exactly the same) ...
         politicians_by_votes_df = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
         selected_politician_ids_str = request.args.getlist('politician_ids_lookup')
         select_all_mode = "All" in request.args.get('politician_select_mode_lookup', '')
         MAX_LOOKUP_POLITICIANS_CONST = 30
-
         selected_politician_ids = []
-
         if select_all_mode:
             if not politicians_by_votes_df.empty:
                 selected_politician_ids = politicians_by_votes_df['politician_id'].head(MAX_LOOKUP_POLITICIANS_CONST).tolist()
@@ -642,7 +649,6 @@ def dashboard():
             'top_word_tables': [],
             'MAX_LOOKUP_POLITICIANS': MAX_LOOKUP_POLITICIANS_CONST
         }
-
         if ids_for_query:
             weekly_df_multiple = fetch_weekly_approval_rating(engine, ids_for_query)
             if not weekly_df_multiple.empty and 'weekly_approval_rating_percent' in weekly_df_multiple.columns and weekly_df_multiple['weekly_approval_rating_percent'].notna().any():
@@ -650,14 +656,12 @@ def dashboard():
                     weekly_df_multiple, x_col='week_start_date', y_col='weekly_approval_rating_percent',
                     group_col='politician_name', title='Weekly Approval Rating Trend', xlabel='Week Start Date', ylabel='Approval Rating (0-100%)')
                 lookup_tab_data['weekly_approval_img_base64'] = get_image_as_base64(weekly_approval_img_buf)
-
             df_scores_raw = fetch_raw_sentiments_for_multiple_politicians(engine, ids_for_query)
             if not df_scores_raw.empty:
                 df_scores_raw['politician_name'] = pd.Categorical(df_scores_raw['politician_name'], categories=selected_politician_names, ordered=True)
                 df_scores_raw.sort_values('politician_name', inplace=True)
                 histogram_buf = plot_multi_sentiment_histograms_to_image(df_scores_raw, num_bins=12)
                 lookup_tab_data['histogram_img_base64'] = get_image_as_base64(histogram_buf)
-
             top_word_tables_list = []
             for pid in selected_politician_ids:
                 pname = politicians_list_df[politicians_list_df['politician_id'] == pid]['name'].iloc[0]
@@ -668,7 +672,6 @@ def dashboard():
                     for item in top_words_list_for_template:
                         if 'Week Start Date' in item and hasattr(item['Week Start Date'], 'strftime'):
                             item['Week Start Date'] = item['Week Start Date'].strftime('%Y-%m-%d')
-
                 top_word_tables_list.append({
                     'politician_name': pname,
                     'top_words_list': top_words_list_for_template
@@ -676,7 +679,6 @@ def dashboard():
             lookup_tab_data['top_word_tables'] = top_word_tables_list
 
     elif active_tab == 'compare':
-        # ... (all of your existing 'compare' logic remains exactly the same) ...
         politicians_by_votes_df = fetch_sentiment_distribution_per_politician(engine, min_total_votes_threshold=1, sort_by_total_votes=True)
         MAX_HEATMAP_POLITICIANS_CONST = 30
         compare_data_dict = {'MAX_HEATMAP_POLITICIANS': MAX_HEATMAP_POLITICIANS_CONST, 'available_politicians': [], 'selected_politician_ids': [], 'heatmap_img_base64': None, 'comparison_df_html': None, 'error_message': None, 'df_for_comparison_calc': pd.DataFrame()}
@@ -687,18 +689,14 @@ def dashboard():
             if not df_all_for_selection.empty:
                 df_form_list = df_all_for_selection.sort_values('politician_name', ascending=True)
                 compare_data_dict['available_politicians'] = df_form_list[['politician_id', 'politician_name']].to_dict(orient='records')
-
-            selected_politician_ids_str = request.args.getlist('politician_ids_compare') # Renamed
+            selected_politician_ids_str = request.args.getlist('politician_ids_compare')
             selected_politician_ids = [int(pid) for pid in selected_politician_ids_str if pid.isdigit()]
-
             if not selected_politician_ids_str and not df_all_for_selection.empty:
                 selected_politician_ids = df_all_for_selection['politician_id'].head(min(5, len(df_all_for_selection))).tolist()
-
-            if "All" in request.args.get('politician_select_mode_compare', '') and not df_all_for_selection.empty: # Renamed
+            if "All" in request.args.get('politician_select_mode_compare', '') and not df_all_for_selection.empty:
                 ids_for_calc = df_all_for_selection['politician_id'].head(MAX_HEATMAP_POLITICIANS_CONST).tolist()
             else:
                 ids_for_calc = selected_politician_ids
-
             compare_data_dict['selected_politician_ids'] = selected_politician_ids
             if ids_for_calc:
                 df_word_counts = fetch_word_counts_per_politician(engine, politician_ids_list=ids_for_calc)
@@ -732,30 +730,24 @@ def dashboard():
                 if not compare_data_dict.get('error_message'): compare_data_dict['error_message'] = "No politicians selected for comparison analysis."
 
     elif active_tab == 'overview':
-        # ... (all of your existing 'overview' logic remains exactly the same) ...
         metrics = fetch_dataset_metrics(engine)
         overview_tab_data = {'metrics': metrics}
 
     elif active_tab == 'feed':
-        # ... (all of your existing 'feed' logic remains exactly the same) ...
         daily_activity_df = fetch_daily_activity(engine)
         activity_graph_img_base64 = None
         if not daily_activity_df.empty:
             activity_graph_buf = plot_daily_activity_to_image(daily_activity_df)
             activity_graph_img_base64 = get_image_as_base64(activity_graph_buf)
-
         today = datetime.date.today()
         query_end_date = today
         query_start_date = today - datetime.timedelta(days=6)
         start_dt_feed = datetime.datetime.combine(query_start_date, datetime.time.min)
         end_dt_feed = datetime.datetime.combine(query_end_date, datetime.time.max)
         feed_df = fetch_feed_updates(engine, start_dt_feed, end_dt_feed)
-        
         feed_list_for_template = []
         if not feed_df.empty:
             feed_list_for_template = feed_df.to_dict(orient='records')
-            # ... (rest of feed logic) ...
-        
         feed_data_dict = {
             'activity_graph_img_base64': activity_graph_img_base64,
             'latest_feed_items': feed_list_for_template,
@@ -763,14 +755,8 @@ def dashboard():
             'feed_display_period_end': query_end_date.strftime('%Y-%m-%d')
         }
 
-    # --- START OF CHANGES ---
-
-    # 1. Construct the full canonical URL.
-    #    request.full_path includes the path and any query parameters (e.g., '/?tab=overview')
-    #    We hardcode 'https' because the app is always served via HTTPS in production.
     canonical_url = f"https://{request.host}{request.full_path}"
 
-    # 2. Add the canonical_url to the render_template call
     return render_template('index.html',
                            active_tab=active_tab,
                            lookup_data=lookup_tab_data,
@@ -778,8 +764,8 @@ def dashboard():
                            overview_data=overview_tab_data,
                            feed_data=feed_data_dict,
                            engine_available=bool(engine),
-                           canonical_url=canonical_url) # <-- The new variable is passed here
-    # --- END OF CHANGES ---
+                           canonical_url=canonical_url)
+
 # --- Favicon & 404 Routes ---
 @app.route('/favicon.ico')
 def favicon():
