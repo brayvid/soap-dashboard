@@ -266,7 +266,6 @@ def fetch_daily_activity(_engine):
         app.logger.error(f"Error in fetch_daily_activity: {e}")
         return pd.DataFrame()
 
-# --- START OF MODIFIED FUNCTION ---
 def fetch_dataset_metrics(_engine):
     metric_keys = [
         "total_politicians", "total_words_scorable", "total_votes", "votes_date_range",
@@ -274,6 +273,7 @@ def fetch_dataset_metrics(_engine):
         "net_approval_rating_percent_all_submissions", "avg_submissions_per_politician",
         "submissions_last_7_days", "most_active_day", "most_described_politician",
         "highest_rated_politician", "lowest_rated_politician",
+        "most_submitted_word", "most_submitted_word_last_7_days",
         "most_positive_word_attribution", "most_negative_word_attribution"
     ]
     if not _engine: return {key: "N/A" for key in metric_keys}
@@ -281,17 +281,25 @@ def fetch_dataset_metrics(_engine):
     MIN_VOTES_FOR_RATING = 20
     try:
         with _engine.connect() as connection:
-            metrics["total_politicians"] = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or 0
-            metrics["total_votes"] = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or 0
-            metrics["total_words_scorable"] = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or 0
+            total_politicians_num = connection.execute(text("SELECT COUNT(*) FROM politicians;")).scalar_one_or_none() or 0
+            total_votes_num = connection.execute(text("SELECT COUNT(*) FROM votes;")).scalar_one_or_none() or 0
+            total_words_scorable_num = connection.execute(text("SELECT COUNT(*) FROM words WHERE sentiment_score IS NOT NULL;")).scalar_one_or_none() or 0
+            
+            metrics["total_politicians"] = f"{total_politicians_num:,}"
+            metrics["total_votes"] = f"{total_votes_num:,}"
+            metrics["total_words_scorable"] = f"{total_words_scorable_num:,}"
+
             res_dates = connection.execute(text("SELECT MIN(created_at)::date, MAX(created_at)::date FROM votes;")).fetchone()
             if res_dates and res_dates[0] and res_dates[1]:
                 metrics["votes_date_range"] = f"{res_dates[0].strftime('%Y-%m-%d')} to {res_dates[1].strftime('%Y-%m-%d')}"
-            if metrics["total_votes"] > 0 and metrics["total_politicians"] > 0:
-                metrics["avg_submissions_per_politician"] = f"{(metrics['total_votes'] / metrics['total_politicians']):.1f}"
+            
+            if total_votes_num > 0 and total_politicians_num > 0:
+                metrics["avg_submissions_per_politician"] = f"{(total_votes_num / total_politicians_num):.1f}"
+
             try:
                 metrics["submissions_last_7_days"] = f"{connection.execute(text('''SELECT COUNT(*) FROM votes WHERE created_at >= NOW() - INTERVAL '7 days';''')).scalar_one():,}"
             except Exception as e: app.logger.error(f"Error fetching submissions_last_7_days: {e}")
+            
             sentiment_query = text("SELECT SUM(w.sentiment_score), COUNT(v.vote_id) FROM votes v JOIN words w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL;")
             sentiment_res = connection.execute(sentiment_query).fetchone()
             if sentiment_res and sentiment_res[1] and sentiment_res[1] > 0:
@@ -313,7 +321,7 @@ def fetch_dataset_metrics(_engine):
                     WITH r AS (SELECT p.name n, COUNT(v.vote_id) c, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) rnk FROM votes v JOIN politicians p ON v.politician_id = p.politician_id GROUP BY p.name)
                     SELECT n, c FROM r WHERE rnk = 1;
                 """)).fetchall()
-                if res: metrics["most_described_politician"] = ", ".join([f"{n} ({c} submissions)" for n, c in res])
+                if res: metrics["most_described_politician"] = ", ".join([f"{n} ({c:,} submissions)" for n, c in res])
             except Exception as e: app.logger.error(f"Error fetching most_described_politician: {e}")
             try:
                 res = connection.execute(text("""
@@ -327,7 +335,72 @@ def fetch_dataset_metrics(_engine):
                     if lo_rated: metrics["lowest_rated_politician"] = ", ".join(lo_rated)
             except Exception as e: app.logger.error(f"Error fetching politician_ratings: {e}")
 
-            # --- START: New logic for extreme word attribution ---
+            # --- START: Most Submitted Word (All Time) ---
+            try:
+                query_all_time = text("""
+                    WITH WordTotalRank AS (
+                        SELECT w.word, COUNT(v.vote_id) as total_count, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) as rnk
+                        FROM votes v JOIN words w ON v.word_id = w.word_id GROUP BY w.word
+                    ), TopWords AS (
+                        SELECT word FROM WordTotalRank WHERE rnk = 1
+                    ), PoliticianWordCounts AS (
+                        SELECT w.word, p.name as politician_name, COUNT(v.vote_id) as politician_word_count,
+                               -- START CHANGE: Rank politicians per word
+                               ROW_NUMBER() OVER (PARTITION BY w.word ORDER BY COUNT(v.vote_id) DESC, p.name ASC) as rn
+                               -- END CHANGE
+                        FROM votes v
+                        JOIN words w ON v.word_id = w.word_id JOIN politicians p ON v.politician_id = p.politician_id
+                        WHERE w.word IN (SELECT word FROM TopWords)
+                        GROUP BY w.word, p.name
+                    )
+                    SELECT word, STRING_AGG(politician_name || ' (' || politician_word_count || ')', ', ' ORDER BY politician_word_count DESC, politician_name ASC) as politicians_breakdown
+                    FROM PoliticianWordCounts 
+                    WHERE rn <= 3 -- START CHANGE: Filter for top 3
+                    GROUP BY word;
+                """)
+                res = connection.execute(query_all_time).fetchall()
+                if res:
+                    word_sentiments = {r.word: r.sentiment_score for r in connection.execute(text("SELECT word, sentiment_score from words")).fetchall()}
+                    formatted_results = [f"{row.word.capitalize()} ({word_sentiments.get(row.word, 0):+.2f}): {row.politicians_breakdown}" for row in res]
+                    metrics["most_submitted_word"] = "; ".join(formatted_results)
+            except Exception as e: app.logger.error(f"Error fetching most_submitted_word: {e}")
+            # --- END: Most Submitted Word (All Time) ---
+
+            # --- START: Most Submitted Word (Last 7 Days) ---
+            try:
+                query_last_7_days = text("""
+                    WITH WordTotalRank AS (
+                        SELECT w.word, COUNT(v.vote_id) as total_count, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) as rnk
+                        FROM votes v JOIN words w ON v.word_id = w.word_id
+                        WHERE v.created_at >= NOW() - INTERVAL '7 days' GROUP BY w.word
+                    ), TopWords AS (
+                        SELECT word FROM WordTotalRank WHERE rnk = 1
+                    ), PoliticianWordCounts AS (
+                        SELECT w.word, p.name as politician_name, COUNT(v.vote_id) as politician_word_count,
+                               -- START CHANGE: Rank politicians per word
+                               ROW_NUMBER() OVER (PARTITION BY w.word ORDER BY COUNT(v.vote_id) DESC, p.name ASC) as rn
+                               -- END CHANGE
+                        FROM votes v
+                        JOIN words w ON v.word_id = w.word_id JOIN politicians p ON v.politician_id = p.politician_id
+                        WHERE w.word IN (SELECT word FROM TopWords) AND v.created_at >= NOW() - INTERVAL '7 days'
+                        GROUP BY w.word, p.name
+                    )
+                    SELECT word, STRING_AGG(politician_name || ' (' || politician_word_count || ')', ', ' ORDER BY politician_word_count DESC, politician_name ASC) as politicians_breakdown
+                    FROM PoliticianWordCounts 
+                    WHERE rn <= 3 -- START CHANGE: Filter for top 3
+                    GROUP BY word;
+                """)
+                res = connection.execute(query_last_7_days).fetchall()
+                if res:
+                    word_sentiments = {r.word: r.sentiment_score for r in connection.execute(text("SELECT word, sentiment_score from words")).fetchall()}
+                    formatted_results = [f"{row.word.capitalize()} ({word_sentiments.get(row.word, 0):+.2f}): {row.politicians_breakdown}" for row in res]
+                    metrics["most_submitted_word_last_7_days"] = "; ".join(formatted_results)
+                else:
+                    metrics["most_submitted_word_last_7_days"] = "No submissions in last 7 days"
+            except Exception as e: app.logger.error(f"Error fetching most_submitted_word_last_7_days: {e}")
+            # --- END: Most Submitted Word (Last 7 Days) ---
+
+            # --- START: Most Positive/Negative Word Attribution (with counts) ---
             try:
                 extreme_words_query = text("""
                     SELECT word, sentiment_score FROM words WHERE sentiment_score IS NOT NULL AND (
@@ -337,62 +410,56 @@ def fetch_dataset_metrics(_engine):
                     );
                 """)
                 extreme_words_res = connection.execute(extreme_words_query).fetchall()
-
                 if extreme_words_res:
-                    # Find the actual max/min scores from the results
                     all_scores = [w.sentiment_score for w in extreme_words_res]
-                    max_score = max(all_scores)
-                    min_score = min(all_scores)
-
-                    # Get lists of words for each extreme score
-                    positive_words = [w.word for w in extreme_words_res if w.sentiment_score == max_score]
-                    negative_words = [w.word for w in extreme_words_res if w.sentiment_score == min_score]
-                    all_extreme_words_list = positive_words + negative_words
-
+                    max_score, min_score = max(all_scores), min(all_scores)
+                    positive_words = {w.word for w in extreme_words_res if w.sentiment_score == max_score}
+                    negative_words = {w.word for w in extreme_words_res if w.sentiment_score == min_score}
+                    all_extreme_words_list = list(positive_words | negative_words)
+                    
                     if all_extreme_words_list:
-                        # Fetch all politicians for all extreme words in one query
                         attribution_query = text("""
-                            SELECT
-                                w.word,
-                                p.name as politician_name
+                            SELECT w.word, p.name as politician_name, COUNT(v.vote_id) as word_count
                             FROM votes v
                             JOIN politicians p ON v.politician_id = p.politician_id
                             JOIN words w ON v.word_id = w.word_id
                             WHERE w.word IN :word_list
                             GROUP BY w.word, p.name
-                            ORDER BY w.word, COUNT(v.vote_id) DESC
+                            ORDER BY w.word, word_count DESC, p.name
                         """)
                         attribution_df = pd.read_sql(attribution_query, connection, params={'word_list': tuple(all_extreme_words_list)})
 
-                        # Process positive words
                         pos_attributions = []
-                        for word in sorted(positive_words): # Sort for consistent output
-                            politicians_for_word = attribution_df[attribution_df['word'] == word]['politician_name'].tolist()
-                            if politicians_for_word:
-                                politician_str = ", ".join(politicians_for_word)
-                                pos_attributions.append(f"{word.capitalize()} ({max_score:+.2f}): {politician_str}")
+                        for word in sorted(list(positive_words)):
+                            politicians_df_for_word = attribution_df[attribution_df['word'] == word]
+                            if not politicians_df_for_word.empty:
+                                # START CHANGE: Take top 3 from the DataFrame
+                                details = [f"{row.politician_name} ({row.word_count})" for row in politicians_df_for_word.head(3).itertuples()]
+                                # END CHANGE
+                                pos_attributions.append(f"{word.capitalize()} ({max_score:+.2f}): {', '.join(details)}")
                         if pos_attributions:
                             metrics["most_positive_word_attribution"] = "; ".join(pos_attributions)
 
-                        # Process negative words
                         neg_attributions = []
-                        for word in sorted(negative_words): # Sort for consistent output
-                            politicians_for_word = attribution_df[attribution_df['word'] == word]['politician_name'].tolist()
-                            if politicians_for_word:
-                                politician_str = ", ".join(politicians_for_word)
-                                neg_attributions.append(f"{word.capitalize()} ({min_score:+.2f}): {politician_str}")
+                        for word in sorted(list(negative_words)):
+                            politicians_df_for_word = attribution_df[attribution_df['word'] == word]
+                            if not politicians_df_for_word.empty:
+                                # START CHANGE: Take top 3 from the DataFrame
+                                details = [f"{row.politician_name} ({row.word_count})" for row in politicians_df_for_word.head(3).itertuples()]
+                                # END CHANGE
+                                neg_attributions.append(f"{word.capitalize()} ({min_score:+.2f}): {', '.join(details)}")
                         if neg_attributions:
                             metrics["most_negative_word_attribution"] = "; ".join(neg_attributions)
 
             except Exception as e:
                 app.logger.error(f"Error fetching extreme word attribution: {e}")
-            # --- END: New logic for extreme word attribution ---
+            # --- END: Most Positive/Negative Word Attribution (with counts) ---
 
     except Exception as e:
         app.logger.error(f"Major error in fetch_dataset_metrics: {e}")
         return {key: "Error" for key in metric_keys}
     return metrics
-# --- END OF MODIFIED FUNCTION ---
+
 
 def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
     df_cols = ["Timestamp", "Politician", "Word", "Sentiment"]

@@ -20,7 +20,6 @@
     {# The entire set of tabs is one big if/elif/endif block #}
 
     {% if active_tab == 'overview' %}
-        {# This block remains unchanged #}
         <div class="tab-content-container">
             <section id="overview-metrics-content">
                 <h2>Dataset Overview</h2>
@@ -29,7 +28,7 @@
                     <div class="metrics-container" style="background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 700px; margin-left: auto; margin-right: auto;">
                         <ul style="list-style-type: none; padding-left: 0;">
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Total Word Submissions:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_votes }}</span>
+                                <strong>Submission Count:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_votes }}</span>
                             </li>
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
                                 <strong>Politicians Added:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.total_politicians }}</span>
@@ -58,6 +57,14 @@
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
                                 <strong>Lowest-Rated:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.lowest_rated_politician }}</span>
                             </li>
+                            <!-- START: New Metrics -->
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Most Submitted Word:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_submitted_word }}</span>
+                            </li>
+                            <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
+                                <strong>Most Submitted Word - Last 7 Days:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_submitted_word_last_7_days }}</span>
+                            </li>
+                            <!-- END: New Metrics -->
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
                                 <strong>Most Positive Word(s):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_positive_word_attribution }}</span>
                             </li>
