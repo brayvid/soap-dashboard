@@ -158,10 +158,10 @@
                                 {% if table_data.top_words_list %}
                                     <div class="table-scroll-wrapper feed-table-wrapper" style="max-height: 400px;">
                                         <table class="styled-table data-table top-word-data-table">
-                                            <thead><tr><th>Week (YYYY-IW)</th><th style="white-space: nowrap;">Week Start Date</th><th>Top Word Used</th><th style="text-align: right;">Votes for Top Word</th><th style="text-align: right;">Total Votes This Week</th></tr></thead>
+                                            <thead><tr><th style="white-space: nowrap;">Week Start</th><th>Top Word</th><th style="text-align: right;">Top Word Votes</th><th style="text-align: right;">All Votes</th></tr></thead>
                                             <tbody>
                                                 {% for row in table_data.top_words_list %}
-                                                <tr><td>{{ row['Week (YYYY-IW)'] }}</td><td style="white-space: nowrap;">{{ row['Week Start Date'] }}</td><td>{{ row['Top Word Used'] }}</td><td style="text-align: right;">{{ row['Votes for Top Word'] }}</td><td style="text-align: right;">{{ row['Total Votes This Week'] }}</td></tr>
+                                                <tr><td style="white-space: nowrap;">{{ row['Week Start'] }}</td><td>{{ row['Top Word'] }}</td><td style="text-align: right;">{{ row['Top Word Votes'] }}</td><td style="text-align: right;">{{ row['All Votes'] }}</td></tr>
                                                 {% endfor %}
                                             </tbody>
                                         </table>

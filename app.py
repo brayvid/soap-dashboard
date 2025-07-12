@@ -494,43 +494,53 @@ def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
         return pd.DataFrame(columns=df_cols)
 
 def fetch_top_weekly_word_for_politician(_engine, politician_id):
-    df_cols = ["Week (YYYY-IW)", "Week Start Date", "Top Word Used", "Votes for Top Word", "Total Votes This Week"]
+    # Define the new column names as requested.
+    df_cols = ["Week Start", "Top Word", "Top Word Votes", "All Votes"]
     if not _engine or politician_id is None: return pd.DataFrame(columns=df_cols)
     try: pid = int(politician_id)
     except ValueError:
         app.logger.error(f"Invalid politician_id for top weekly word: {politician_id}")
         return pd.DataFrame(columns=df_cols)
+    
+    # Updated SQL query to remove the 'year_week' and rename the output columns.
     query = text(f"""
         WITH WeeklyWordCounts AS (
             SELECT v.politician_id, w.word AS word_text, DATE_TRUNC('week', v.created_at)::date AS week_start_date,
-                   TO_CHAR(v.created_at, 'IYYY-IW') AS year_week, COUNT(v.vote_id) AS word_vote_count
+                   COUNT(v.vote_id) AS word_vote_count
             FROM votes v JOIN words w ON v.word_id = w.word_id WHERE v.politician_id = :politician_id_param
-            GROUP BY v.politician_id, w.word, week_start_date, year_week
+            GROUP BY v.politician_id, w.word, week_start_date
         ), RankedWeeklyWords AS (
-            SELECT politician_id, word_text, week_start_date, year_week, word_vote_count,
+            SELECT politician_id, word_text, week_start_date, word_vote_count,
                    ROW_NUMBER() OVER (PARTITION BY politician_id, week_start_date ORDER BY word_vote_count DESC, word_text ASC) as rn
             FROM WeeklyWordCounts
         ), TotalVotesPerWeek AS (
             SELECT politician_id, DATE_TRUNC('week', v.created_at)::date AS week_start_date, COUNT(v.vote_id) as total_weekly_votes
             FROM votes v WHERE v.politician_id = :politician_id_param GROUP BY politician_id, week_start_date
         )
-        SELECT rww.year_week AS "Week (YYYY-IW)", rww.week_start_date AS "Week Start Date", rww.word_text AS "Top Word Used",
-               rww.word_vote_count AS "Votes for Top Word", COALESCE(tvpw.total_weekly_votes, 0) AS "Total Votes This Week"
+        SELECT rww.week_start_date AS "Week Start", rww.word_text AS "Top Word",
+               rww.word_vote_count AS "Top Word Votes", COALESCE(tvpw.total_weekly_votes, 0) AS "All Votes"
         FROM RankedWeeklyWords rww LEFT JOIN TotalVotesPerWeek tvpw
             ON rww.politician_id = tvpw.politician_id AND rww.week_start_date = tvpw.week_start_date
         WHERE rww.rn = 1 ORDER BY rww.week_start_date DESC;""")
     try:
         with _engine.connect() as connection: df = pd.read_sql(query, connection, params={'politician_id_param': pid})
         if df.empty: return pd.DataFrame(columns=df_cols)
-        if "Week Start Date" in df.columns: df["Week Start Date"] = pd.to_datetime(df["Week Start Date"])
-        if "Top Word Used" in df.columns: df["Top Word Used"] = df["Top Word Used"].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
-        for col in ["Votes for Top Word", "Total Votes This Week"]:
+
+        # Update post-processing to use the new column names.
+        if "Week Start" in df.columns: df["Week Start"] = pd.to_datetime(df["Week Start"])
+        if "Top Word" in df.columns: df["Top Word"] = df["Top Word"].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+        for col in ["Top Word Votes", "All Votes"]:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-        return df
+        
+        # Ensure all expected columns are present before returning
+        for col in df_cols:
+            if col not in df.columns:
+                df[col] = pd.NA
+        return df[df_cols]
+
     except Exception as e:
         app.logger.error(f"Error fetching top weekly word for politician_id {pid}: {e}\nQuery: {query}")
         return pd.DataFrame(columns=df_cols)
-
 
 # --- Plotting Functions ---
 SENTIMENT_COLORMAP = LinearSegmentedColormap.from_list("sentiment_spectrum", [
@@ -734,11 +744,12 @@ def dashboard():
                 pname = politicians_list_df[politicians_list_df['politician_id'] == pid]['name'].iloc[0]
                 top_words_df = fetch_top_weekly_word_for_politician(engine, pid)
                 top_words_list_for_template = []
+                # --- This is the NEW, corrected code ---
                 if not top_words_df.empty:
                     top_words_list_for_template = top_words_df.to_dict(orient='records')
                     for item in top_words_list_for_template:
-                        if 'Week Start Date' in item and hasattr(item['Week Start Date'], 'strftime'):
-                            item['Week Start Date'] = item['Week Start Date'].strftime('%Y-%m-%d')
+                        if 'Week Start' in item and hasattr(item['Week Start'], 'strftime'):
+                            item['Week Start'] = item['Week Start'].strftime('%Y-%m-%d')
                 top_word_tables_list.append({
                     'politician_name': pname,
                     'top_words_list': top_words_list_for_template

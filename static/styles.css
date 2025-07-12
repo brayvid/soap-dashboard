@@ -249,24 +249,22 @@ button.button-primary:hover {
 
 /* Column width rules */
 .feed-table-wrapper table.feed-table th:nth-child(1),
-.feed-table-wrapper table.feed-table td:nth-child(1) { width: 28%; }
+.feed-table-wrapper table.feed-table td:nth-child(1) { width: 24%; }
 .feed-table-wrapper table.feed-table th:nth-child(2),
 .feed-table-wrapper table.feed-table td:nth-child(2) { width: 30%; }
 .feed-table-wrapper table.feed-table th:nth-child(3),
-.feed-table-wrapper table.feed-table td:nth-child(3) { width: 22%; }
+.feed-table-wrapper table.feed-table td:nth-child(3) { width: 24%; }
 .feed-table-wrapper table.feed-table th:nth-child(4),
-.feed-table-wrapper table.feed-table td:nth-child(4) { width: 20%; }
+.feed-table-wrapper table.feed-table td:nth-child(4) { width: 22%; }
 
 .feed-table-wrapper table.top-word-data-table th:nth-child(1),
-.feed-table-wrapper table.top-word-data-table td:nth-child(1) { width: 20%; }
+.feed-table-wrapper table.top-word-data-table td:nth-child(1) { width: 28%; }
 .feed-table-wrapper table.top-word-data-table th:nth-child(2),
-.feed-table-wrapper table.top-word-data-table td:nth-child(2) { width: 20%; }
+.feed-table-wrapper table.top-word-data-table td:nth-child(2) { width: 28%; }
 .feed-table-wrapper table.top-word-data-table th:nth-child(3),
-.feed-table-wrapper table.top-word-data-table td:nth-child(3) { width: 25%; }
+.feed-table-wrapper table.top-word-data-table td:nth-child(3) { width: 26%; }
 .feed-table-wrapper table.top-word-data-table th:nth-child(4),
-.feed-table-wrapper table.top-word-data-table td:nth-child(4) { width: 17%; }
-.feed-table-wrapper table.top-word-data-table th:nth-child(5),
-.feed-table-wrapper table.top-word-data-table td:nth-child(5) { width: 18%; }
+.feed-table-wrapper table.top-word-data-table td:nth-child(4) { width: 18%; }
 
 /* --- Plot Images & Messages --- */
 .plot-container {
@@ -419,4 +417,21 @@ button.button-primary:hover {
 /* --- Specific Slider Override --- */
 #min_votes_slider_sentiment {
   width: 100%;
+}
+
+@media (max-width: 768px) { /* Adjust the max-width as needed */
+    #lookup-content table td {
+        font-size: 0.68rem; /* Smaller font size for mobile */
+    }
+        #lookup-content table thead th {
+        font-size: 0.75rem; /* Smaller font size for mobile */
+    }
+
+        #feed-content table td {
+        font-size: 0.5rem; /* Smaller font size for mobile */
+    }
+        #feed-content table thead th {
+        font-size: 0.6rem; /* Smaller font size for mobile */
+    }
+
 }
