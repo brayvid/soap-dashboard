@@ -323,7 +323,6 @@ button.button-primary:hover {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   width: 100%;
   margin: 1rem 0;
-  padding: 0;
   font-size: 80%; /* 👈 Add this line */
 }
 
@@ -345,6 +344,15 @@ button.button-primary:hover {
   float: right;
   font-weight: bold;
   color: #337ab7;
+}
+
+
+#overview-metrics-content div ul {
+  padding: 0;
+}
+
+.metrics-container {
+  padding: 10px !important;
 }
 
 @media (max-width: 680px) {
