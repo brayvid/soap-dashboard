@@ -17,6 +17,7 @@ import base64
 import datetime
 import spacy # Added for semantic comparison
 from matplotlib.colors import LinearSegmentedColormap # Import this for custom colormaps
+import matplotlib.dates as mdates
 
 # --- SPEED OPTIMIZATIONS: Import required libraries ---
 from flask_compress import Compress
@@ -231,7 +232,7 @@ def fetch_weekly_approval_rating(_engine, politician_ids_list):
         return pd.DataFrame()
 
 def fetch_daily_activity(_engine):
-    """Fetches daily counts of word submissions and new politician additions."""
+    """Fetches daily counts of word submissions, new politician additions, and new word additions."""
     if not _engine: return pd.DataFrame()
 
     submissions_query = text("""
@@ -242,30 +243,39 @@ def fetch_daily_activity(_engine):
         SELECT DATE(created_at) AS activity_date, COUNT(politician_id) AS addition_count
         FROM politicians WHERE created_at IS NOT NULL GROUP BY activity_date;
     """)
+    new_words_query = text("""
+        SELECT DATE(created_at) AS activity_date, COUNT(word_id) AS new_word_count
+        FROM words WHERE created_at IS NOT NULL GROUP BY activity_date;
+    """)
 
     try:
         with _engine.connect() as connection:
             submissions_df = pd.read_sql(submissions_query, connection)
             additions_df = pd.read_sql(additions_query, connection)
+            new_words_df = pd.read_sql(new_words_query, connection)
 
-        for df in [submissions_df, additions_df]:
+        for df in [submissions_df, additions_df, new_words_df]:
             if not df.empty:
                 df['activity_date'] = pd.to_datetime(df['activity_date'])
 
-        if submissions_df.empty and additions_df.empty:
-            return pd.DataFrame(columns=['activity_date', 'submission_count', 'addition_count'])
+        if submissions_df.empty and additions_df.empty and new_words_df.empty:
+            return pd.DataFrame(columns=['activity_date', 'submission_count', 'addition_count', 'new_word_count'])
 
+        # Merge all three dataframes
         activity_df = pd.merge(submissions_df, additions_df, on='activity_date', how='outer')
+        activity_df = pd.merge(activity_df, new_words_df, on='activity_date', how='outer')
+
         activity_df.fillna(0, inplace=True)
         activity_df['submission_count'] = activity_df['submission_count'].astype(int)
         activity_df['addition_count'] = activity_df['addition_count'].astype(int)
+        activity_df['new_word_count'] = activity_df['new_word_count'].astype(int)
         activity_df.sort_values('activity_date', inplace=True)
         return activity_df
 
     except Exception as e:
         app.logger.error(f"Error in fetch_daily_activity: {e}")
         return pd.DataFrame()
-
+    
 def fetch_dataset_metrics(_engine):
     metric_keys = [
         "total_politicians", "total_words_scorable", "total_votes", "votes_date_range",
@@ -608,24 +618,29 @@ def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, yl
     plt.close(fig); return img_buf
 
 def plot_daily_activity_to_image(df):
-    """Generates a dual-axis bar chart for daily submissions and additions."""
+    """Generates a dual-axis grouped bar chart for daily submissions, politician additions, and new word additions for the last 30 days."""
     import matplotlib.dates as mdates
     if df.empty or ('submission_count' not in df.columns and 'addition_count' not in df.columns):
         return None
 
-    df_filtered = df[df['activity_date'] >= (datetime.datetime.now() - datetime.timedelta(days=90))]
+    # Filter for the last 30 days directly.
+    df_filtered = df[df['activity_date'] >= (datetime.datetime.now() - datetime.timedelta(days=30))]
     if df_filtered.empty:
-        df_filtered = df.tail(30)
-        if df_filtered.empty: return None
+        return None # Return if there is no data in the last 30 days.
 
     fig, ax1 = plt.subplots(figsize=(15, 7))
-    bar_width = 0.4
+    bar_width = 0.25
     dates = df_filtered['activity_date']
     x_pos = mdates.date2num(dates)
 
-    color1 = 'skyblue'
-    ax1.set_ylabel('Word Submissions', color=color1, fontsize=12, weight='bold')
-    ax1.bar(x_pos - bar_width/2, df_filtered['submission_count'], width=bar_width, color=color1, label='Word Submissions')
+    # --- START MODIFICATION: Changed the blue to a light purple ---
+    color1 = '#A997DF'  # Light Purple
+    color2 = '#DC6E79'  # (220, 110, 121)
+    color3 = '#46853E'  # (70, 133, 62)
+    # --- END MODIFICATION ---
+
+    ax1.set_ylabel('Daily Votes', color=color1, fontsize=12, weight='bold')
+    ax1.bar(x_pos - bar_width, df_filtered['submission_count'], width=bar_width, color=color1, label='Votes Submitted')
     ax1.tick_params(axis='y', labelcolor=color1)
     max_submissions = df_filtered['submission_count'].max()
     ax1.set_ylim(0, max(10, max_submissions * 1.1))
@@ -633,16 +648,20 @@ def plot_daily_activity_to_image(df):
     ax1.spines['top'].set_visible(False)
 
     ax2 = ax1.twinx()
-    color2 = 'salmon'
-    ax2.set_ylabel('Politician Additions', color=color2, fontsize=12, weight='bold')
-    ax2.bar(x_pos + bar_width/2, df_filtered['addition_count'], width=bar_width, color=color2, label='Politician Additions')
-    ax2.tick_params(axis='y', labelcolor=color2)
+    
+    ax2.set_ylabel('Daily Additions', fontsize=12, weight='bold')
+
+    ax2.bar(x_pos, df_filtered['addition_count'], width=bar_width, color=color2, label='New Politicians Added')
+    ax2.bar(x_pos + bar_width, df_filtered['new_word_count'], width=bar_width, color=color3, label='New Words Added')
+    
+    ax2.tick_params(axis='y')
     max_additions = df_filtered['addition_count'].max()
-    ax2.set_ylim(0, max(5, max_additions * 1.2))
+    max_new_words = df_filtered['new_word_count'].max()
+    ax2.set_ylim(0, max(5, max(max_additions, max_new_words) * 1.2))
     ax2.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax2.spines['top'].set_visible(False)
 
-    ax1.set_title('Daily Activity: Submissions & Politician Additions (Last 90 Days)', fontsize=16, weight='bold', pad=20)
+    ax1.set_title('Daily Activity: Submissions & Additions (Last 30 Days)', fontsize=16, weight='bold', pad=20)
     ax1.set_xlabel('Date', fontsize=12)
     ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
     fig.autofmt_xdate(rotation=30, ha='right')
