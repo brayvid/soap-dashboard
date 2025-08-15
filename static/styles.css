@@ -443,3 +443,25 @@ button.button-primary:hover {
     }
 
 }
+
+/* --- START: NEW STYLES FOR OVERVIEW METRICS LINKS --- */
+/*
+  This targets the new <a> tags in the metrics list.
+  - Groups :link and :visited to ensure the color does not change after clicking.
+  - Inherits the color from the parent <span> to match the existing style.
+  - Adds an underline on :hover and :active for better user feedback.
+*/
+.metrics-container li span a,
+.metrics-container li span a:link,
+.metrics-container li span a:visited {
+  color: inherit; /* Inherit the blue color from the parent span */
+  text-decoration: none; /* No underline by default */
+  font-weight: inherit; /* Inherit bold weight from the parent span */
+}
+
+.metrics-container li span a:hover,
+.metrics-container li span a:active {
+  color: #23527c; /* A darker blue for the hover/active state */
+  text-decoration: underline; /* Add underline on hover */
+}
+/* --- END: NEW STYLES FOR OVERVIEW METRICS LINKS --- */

@@ -49,27 +49,27 @@
                                 <strong>Most Active Day:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_active_day }}</span>
                             </li>
                              <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Most Described:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_described_politician }}</span>
+                                <strong>Most Described:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_described_politician | safe }}</span>
                             </li>
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Highest-Rated:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.highest_rated_politician }}</span>
+                                <strong>Highest-Rated:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.highest_rated_politician | safe }}</span>
                             </li>
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Lowest-Rated:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.lowest_rated_politician }}</span>
+                                <strong>Lowest-Rated:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.lowest_rated_politician | safe }}</span>
                             </li>
                             <!-- START: New Metrics -->
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Most Submitted Word:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_submitted_word }}</span>
+                                <strong>Most Submitted Word:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_submitted_word | safe }}</span>
                             </li>
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Most Submitted Word - Last 7 Days:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_submitted_word_last_7_days }}</span>
+                                <strong>Most Submitted Word - Last 7 Days:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_submitted_word_last_7_days | safe }}</span>
                             </li>
                             <!-- END: New Metrics -->
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Most Positive Word(s):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_positive_word_attribution }}</span>
+                                <strong>Most Positive Word(s):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_positive_word_attribution | safe }}</span>
                             </li>
                             <li style="margin-bottom: 12px; font-size: 1.1em; padding: 8px; border-bottom: 1px solid #eee; overflow: hidden;">
-                                <strong>Most Negative Word(s):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_negative_word_attribution }}</span>
+                                <strong>Most Negative Word(s):</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.most_negative_word_attribution | safe }}</span>
                             </li>
                             <li style="font-size: 1.1em; padding: 8px; overflow: hidden;">
                                 <strong>Data Range:</strong> <span style="float: right; font-weight: bold; color: #337ab7;">{{ overview_data.metrics.votes_date_range }}</span>
@@ -293,5 +293,4 @@
 {% endblock %}
 
 {% block scripts %}
-{# No scripts are needed for this page anymore, so this block is empty. #}
 {% endblock %}

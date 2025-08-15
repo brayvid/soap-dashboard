@@ -1,11 +1,13 @@
+# Copyright 2024-2025 soap.fyi. All rights reserved. <https://soap.fyi> */
+
 import matplotlib
-matplotlib.use('Agg') # Should be very early
+matplotlib.use('Agg')
 
 from dotenv import load_dotenv
 load_dotenv() # Load .env before other imports that might use env vars
 
 import os
-from flask import Flask, render_template, request, url_for, send_from_directory, jsonify, redirect
+from flask import Flask, render_template, request, send_from_directory, redirect
 import pandas as pd
 from sqlalchemy import create_engine, text
 import matplotlib.pyplot as plt
@@ -15,8 +17,8 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import base64
 import datetime
-import spacy # Added for semantic comparison
-from matplotlib.colors import LinearSegmentedColormap # Import this for custom colormaps
+import spacy # Semantic comparison
+from matplotlib.colors import LinearSegmentedColormap # Custom colormaps
 import matplotlib.dates as mdates
 
 # --- SPEED OPTIMIZATIONS: Import required libraries ---
@@ -328,19 +330,19 @@ def fetch_dataset_metrics(_engine):
             except Exception as e: app.logger.error(f"Error fetching most_active_day: {e}")
             try:
                 res = connection.execute(text("""
-                    WITH r AS (SELECT p.name n, COUNT(v.vote_id) c, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) rnk FROM votes v JOIN politicians p ON v.politician_id = p.politician_id GROUP BY p.name)
-                    SELECT n, c FROM r WHERE rnk = 1;
+                    WITH r AS (SELECT p.politician_id i, p.name n, COUNT(v.vote_id) c, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) rnk FROM votes v JOIN politicians p ON v.politician_id = p.politician_id GROUP BY p.politician_id, p.name)
+                    SELECT i, n, c FROM r WHERE rnk = 1;
                 """)).fetchall()
-                if res: metrics["most_described_politician"] = ", ".join([f"{n} ({c:,} submissions)" for n, c in res])
+                if res: metrics["most_described_politician"] = ", ".join([f'<a href="https://use.soap.fyi/politician/{i}">{n}</a> ({c:,} submissions)' for i, n, c in res])
             except Exception as e: app.logger.error(f"Error fetching most_described_politician: {e}")
             try:
                 res = connection.execute(text("""
-                    WITH s AS (SELECT p.name n, (SUM(w.sentiment_score)/COUNT(v.vote_id)) sc, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) DESC) r_hi, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) ASC) r_lo FROM votes v JOIN words w ON v.word_id=w.word_id JOIN politicians p ON v.politician_id=p.politician_id WHERE w.sentiment_score IS NOT NULL GROUP BY p.name HAVING COUNT(v.vote_id) >= :min_votes)
-                    SELECT n, sc, r_hi, r_lo FROM s WHERE r_hi=1 OR r_lo=1;
+                    WITH s AS (SELECT p.politician_id i, p.name n, (SUM(w.sentiment_score)/COUNT(v.vote_id)) sc, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) DESC) r_hi, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) ASC) r_lo FROM votes v JOIN words w ON v.word_id=w.word_id JOIN politicians p ON v.politician_id=p.politician_id WHERE w.sentiment_score IS NOT NULL GROUP BY p.politician_id, p.name HAVING COUNT(v.vote_id) >= :min_votes)
+                    SELECT i, n, sc, r_hi, r_lo FROM s WHERE r_hi=1 OR r_lo=1;
                 """), {'min_votes': MIN_VOTES_FOR_RATING}).fetchall()
                 if res:
-                    hi_rated = [f"{r.n} ({(((r.sc/2.0)+0.5)*100.0):.1f}%)" for r in res if r.r_hi==1]
-                    lo_rated = [f"{r.n} ({(((r.sc/2.0)+0.5)*100.0):.1f}%)" for r in res if r.r_lo==1]
+                    hi_rated = [f'<a href="https://use.soap.fyi/politician/{r.i}">{r.n}</a> ({(((r.sc/2.0)+0.5)*100.0):.1f}%)' for r in res if r.r_hi==1]
+                    lo_rated = [f'<a href="https://use.soap.fyi/politician/{r.i}">{r.n}</a> ({(((r.sc/2.0)+0.5)*100.0):.1f}%)' for r in res if r.r_lo==1]
                     if hi_rated: metrics["highest_rated_politician"] = ", ".join(hi_rated)
                     if lo_rated: metrics["lowest_rated_politician"] = ", ".join(lo_rated)
             except Exception as e: app.logger.error(f"Error fetching politician_ratings: {e}")
@@ -354,18 +356,16 @@ def fetch_dataset_metrics(_engine):
                     ), TopWords AS (
                         SELECT word FROM WordTotalRank WHERE rnk = 1
                     ), PoliticianWordCounts AS (
-                        SELECT w.word, p.name as politician_name, COUNT(v.vote_id) as politician_word_count,
-                               -- START CHANGE: Rank politicians per word
+                        SELECT w.word, p.politician_id, p.name as politician_name, COUNT(v.vote_id) as politician_word_count,
                                ROW_NUMBER() OVER (PARTITION BY w.word ORDER BY COUNT(v.vote_id) DESC, p.name ASC) as rn
-                               -- END CHANGE
                         FROM votes v
                         JOIN words w ON v.word_id = w.word_id JOIN politicians p ON v.politician_id = p.politician_id
                         WHERE w.word IN (SELECT word FROM TopWords)
-                        GROUP BY w.word, p.name
+                        GROUP BY w.word, p.politician_id, p.name
                     )
-                    SELECT word, STRING_AGG(politician_name || ' (' || politician_word_count || ')', ', ' ORDER BY politician_word_count DESC, politician_name ASC) as politicians_breakdown
+                    SELECT word, STRING_AGG('<a href="https://use.soap.fyi/politician/' || politician_id || '">' || politician_name || '</a> (' || politician_word_count || ')', ', ' ORDER BY politician_word_count DESC, politician_name ASC) as politicians_breakdown
                     FROM PoliticianWordCounts 
-                    WHERE rn <= 3 -- START CHANGE: Filter for top 3
+                    WHERE rn <= 3
                     GROUP BY word;
                 """)
                 res = connection.execute(query_all_time).fetchall()
@@ -386,18 +386,16 @@ def fetch_dataset_metrics(_engine):
                     ), TopWords AS (
                         SELECT word FROM WordTotalRank WHERE rnk = 1
                     ), PoliticianWordCounts AS (
-                        SELECT w.word, p.name as politician_name, COUNT(v.vote_id) as politician_word_count,
-                               -- START CHANGE: Rank politicians per word
+                        SELECT w.word, p.politician_id, p.name as politician_name, COUNT(v.vote_id) as politician_word_count,
                                ROW_NUMBER() OVER (PARTITION BY w.word ORDER BY COUNT(v.vote_id) DESC, p.name ASC) as rn
-                               -- END CHANGE
                         FROM votes v
                         JOIN words w ON v.word_id = w.word_id JOIN politicians p ON v.politician_id = p.politician_id
                         WHERE w.word IN (SELECT word FROM TopWords) AND v.created_at >= NOW() - INTERVAL '7 days'
-                        GROUP BY w.word, p.name
+                        GROUP BY w.word, p.politician_id, p.name
                     )
-                    SELECT word, STRING_AGG(politician_name || ' (' || politician_word_count || ')', ', ' ORDER BY politician_word_count DESC, politician_name ASC) as politicians_breakdown
+                    SELECT word, STRING_AGG('<a href="https://use.soap.fyi/politician/' || politician_id || '">' || politician_name || '</a> (' || politician_word_count || ')', ', ' ORDER BY politician_word_count DESC, politician_name ASC) as politicians_breakdown
                     FROM PoliticianWordCounts 
-                    WHERE rn <= 3 -- START CHANGE: Filter for top 3
+                    WHERE rn <= 3
                     GROUP BY word;
                 """)
                 res = connection.execute(query_last_7_days).fetchall()
@@ -429,12 +427,12 @@ def fetch_dataset_metrics(_engine):
                     
                     if all_extreme_words_list:
                         attribution_query = text("""
-                            SELECT w.word, p.name as politician_name, COUNT(v.vote_id) as word_count
+                            SELECT w.word, p.politician_id, p.name as politician_name, COUNT(v.vote_id) as word_count
                             FROM votes v
                             JOIN politicians p ON v.politician_id = p.politician_id
                             JOIN words w ON v.word_id = w.word_id
                             WHERE w.word IN :word_list
-                            GROUP BY w.word, p.name
+                            GROUP BY w.word, p.politician_id, p.name
                             ORDER BY w.word, word_count DESC, p.name
                         """)
                         attribution_df = pd.read_sql(attribution_query, connection, params={'word_list': tuple(all_extreme_words_list)})
@@ -443,9 +441,7 @@ def fetch_dataset_metrics(_engine):
                         for word in sorted(list(positive_words)):
                             politicians_df_for_word = attribution_df[attribution_df['word'] == word]
                             if not politicians_df_for_word.empty:
-                                # START CHANGE: Take top 3 from the DataFrame
-                                details = [f"{row.politician_name} ({row.word_count})" for row in politicians_df_for_word.head(3).itertuples()]
-                                # END CHANGE
+                                details = [f'<a href="https://use.soap.fyi/politician/{row.politician_id}">{row.politician_name}</a> ({row.word_count})' for row in politicians_df_for_word.head(3).itertuples()]
                                 pos_attributions.append(f"{word.capitalize()} ({max_score:+.2f}): {', '.join(details)}")
                         if pos_attributions:
                             metrics["most_positive_word_attribution"] = "; ".join(pos_attributions)
@@ -454,9 +450,7 @@ def fetch_dataset_metrics(_engine):
                         for word in sorted(list(negative_words)):
                             politicians_df_for_word = attribution_df[attribution_df['word'] == word]
                             if not politicians_df_for_word.empty:
-                                # START CHANGE: Take top 3 from the DataFrame
-                                details = [f"{row.politician_name} ({row.word_count})" for row in politicians_df_for_word.head(3).itertuples()]
-                                # END CHANGE
+                                details = [f'<a href="https://use.soap.fyi/politician/{row.politician_id}">{row.politician_name}</a> ({row.word_count})' for row in politicians_df_for_word.head(3).itertuples()]
                                 neg_attributions.append(f"{word.capitalize()} ({min_score:+.2f}): {', '.join(details)}")
                         if neg_attributions:
                             metrics["most_negative_word_attribution"] = "; ".join(neg_attributions)
@@ -469,7 +463,6 @@ def fetch_dataset_metrics(_engine):
         app.logger.error(f"Major error in fetch_dataset_metrics: {e}")
         return {key: "Error" for key in metric_keys}
     return metrics
-
 
 def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
     df_cols = ["Timestamp", "Politician", "Word", "Sentiment"]
@@ -752,12 +745,25 @@ def dashboard():
                     weekly_df_multiple, x_col='week_start_date', y_col='weekly_approval_rating_percent',
                     group_col='politician_name', title='Weekly Approval Rating Trend', xlabel='Week Start Date', ylabel='Approval Rating (0-100%)')
                 lookup_tab_data['weekly_approval_img_base64'] = get_image_as_base64(weekly_approval_img_buf)
+            
             df_scores_raw = fetch_raw_sentiments_for_multiple_politicians(engine, ids_for_query)
             if not df_scores_raw.empty:
-                df_scores_raw['politician_name'] = pd.Categorical(df_scores_raw['politician_name'], categories=selected_politician_names, ordered=True)
+                # Calculate median sentiment score for each politician
+                median_scores = df_scores_raw.groupby('politician_name')['sentiment_score'].median()
+                # Get politician names sorted by median score in descending order
+                sorted_names_by_median = median_scores.sort_values(ascending=False).index.tolist()
+                
+                # Reorder the 'politician_name' column based on the median score
+                df_scores_raw['politician_name'] = pd.Categorical(
+                    df_scores_raw['politician_name'], 
+                    categories=sorted_names_by_median, 
+                    ordered=True
+                )
                 df_scores_raw.sort_values('politician_name', inplace=True)
+                
                 histogram_buf = plot_multi_sentiment_histograms_to_image(df_scores_raw, num_bins=12)
                 lookup_tab_data['histogram_img_base64'] = get_image_as_base64(histogram_buf)
+
             top_word_tables_list = []
             for pid in selected_politician_ids:
                 pname = politicians_list_df[politicians_list_df['politician_id'] == pid]['name'].iloc[0]
@@ -862,7 +868,6 @@ def dashboard():
                            feed_data=feed_data_dict,
                            engine_available=bool(engine),
                            canonical_url=canonical_url)
-
 # --- Favicon & 404 Routes ---
 @app.route('/favicon.ico')
 def favicon():

@@ -21,7 +21,6 @@
 
     {# 2. INLINE CRITICAL CSS: Paste the minimal CSS needed for the above-the-fold content here. #}
     <style>
-      /* This is a placeholder for your critical CSS. */
       body { font-family: 'Inter', sans-serif; background-color: #fff; color: #212529; display: flex; flex-direction: column; min-height: 100vh; margin: 0;}
       .navbar { display: flex; justify-content: space-between; padding: 1rem; border-bottom: 1px solid #e9ecef;}
       .footer { text-align: center; padding: 1rem; margin-top: auto; font-size: 0.9rem; color: #6c757d; }
@@ -33,7 +32,7 @@
     {% endassets %}
     <noscript><link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"></noscript>
 
-    <!-- Google tag (gtag.js) is already async, which is correct. -->
+    <!-- Google tag (gtag.js)  -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-QL7EMV1Y4X"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
@@ -44,7 +43,7 @@
     {% block head_extra %}{% endblock %}
 </head>
 <body>
-    <!-- Navbar - matching your new index.html structure -->
+    <!-- Navbar - matching index.html structure -->
     <nav class="navbar">
         <a href="https://www.use.soap.fyi">Home</a>
         <div class="navbar-title">Soap Dashboard</div>
