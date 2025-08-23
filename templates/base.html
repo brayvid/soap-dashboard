@@ -10,8 +10,10 @@
     <!-- SEO Meta Description -->
     <meta name="description" content="Explore real-time political sentiment. Our live dashboard tracks politician approval ratings and public perception using unique, crowdsourced word association data.">
     
-    <!-- Canonical URL Tag: Tells search engines the single, authoritative URL for this page -->
-    <link rel="canonical" href="{{ canonical_url }}">
+    <!-- Canonical URL Tag: Only rendered if canonical_url is provided by the backend (i.e., in production) -->
+    {% if canonical_url %}
+        <link rel="canonical" href="{{ canonical_url }}">
+    {% endif %}
 
     <title>Soap | Dashboard</title>
     
@@ -45,7 +47,8 @@
 <body>
     <!-- Navbar - matching index.html structure -->
     <nav class="navbar">
-        <a href="https://www.use.soap.fyi">Home</a>
+        {# UPDATED: Changed the Home link to non-www #}
+        <a href="https://use.soap.fyi">Home</a>
         <div class="navbar-title">Soap Dashboard</div>
         <div class="navbar-right-menu">
             <a href="/">Dash</a>

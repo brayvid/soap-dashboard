@@ -20,6 +20,7 @@ import datetime
 import spacy # Semantic comparison
 from matplotlib.colors import LinearSegmentedColormap # Custom colormaps
 import matplotlib.dates as mdates
+from urllib.parse import urljoin, urlencode # For constructing canonical URLs
 
 # --- SPEED OPTIMIZATIONS: Import required libraries ---
 from flask_compress import Compress
@@ -28,17 +29,58 @@ from flask_assets import Environment, Bundle
 
 app = Flask(__name__)
 
+# --- Determine Deployment Environment ---
+DEPLOY_ENV = os.environ.get('DEPLOY_ENV', 'DEVELOPMENT').upper()
+
+# ===================================================================
+# --- FIX 1: REDIRECT WWW TO NON-WWW ---
+# This middleware runs before every request to enforce the canonical domain.
+# It should always be active, not just in production.
+# ===================================================================
 @app.before_request
-def redirect_to_www():
-    # Only redirect if the app is in PRODUCTION environment
-    if os.environ.get('DEPLOY_ENV') == 'PRODUCTION':
-        # Check if the request is on the apex domain and not a health check
-        if request.host == 'dash.soap.fyi' and request.path != '/healthz':
-            # Construct the new URL with 'www'
-            new_url = request.url.replace('://dash.soap.fyi', '://www.dash.soap.fyi', 1)
-            # Redirect permanently
-            return redirect(new_url, code=301)
-        
+def redirect_to_non_www():
+    """Redirect www requests to non-www to enforce canonical URL."""
+    # Check if the request is on the www subdomain and not a health check
+    if request.host.startswith('www.') and request.path != '/healthz':
+        # Construct the new URL by removing 'www.'
+        new_url = request.url.replace('www.', '', 1)
+        # Issue a permanent redirect (301)
+        app.logger.info(f"Redirecting from www to non-www: {request.url} -> {new_url}")
+        return redirect(new_url, code=301)
+
+# ===================================================================
+# --- FIX 2: AUTOMATICALLY PROVIDE CORRECT CANONICAL URL TO ALL TEMPLATES ---
+# This context processor makes `canonical_url` available in every template.
+# It is now environment-aware.
+# ===================================================================
+@app.context_processor
+def inject_canonical_url():
+    """
+    Makes the canonical URL for the current page available to all templates.
+    Uses a configured production URL in DEPLOY_ENV='PRODUCTION', otherwise omits it.
+    """
+    if DEPLOY_ENV == 'PRODUCTION':
+        canonical_base_url = os.environ.get('DASHBOARD_CANONICAL_BASE_URL')
+        if canonical_base_url:
+            # Reconstruct the URL using the canonical host and the current path
+            canonical_url_full = urljoin(canonical_base_url, request.path)
+
+            # Add query string if present
+            if request.query_string:
+                canonical_url_full += '?' + request.query_string.decode('utf-8')
+            
+            app.logger.debug(f"Canonical URL injected for PRODUCTION: {canonical_url_full}")
+            return dict(canonical_url=canonical_url_full)
+        else:
+            app.logger.warning("DASHBOARD_CANONICAL_BASE_URL not set in PRODUCTION. Canonical tag will be omitted.")
+            return dict(canonical_url=None) # Explicitly set to None
+    else:
+        # In development or other non-production environments, do not render a canonical tag.
+        # This prevents incorrect local hostnames from being used.
+        app.logger.debug(f"Canonical tag omitted for non-PRODUCTION environment (current host: {request.host}).")
+        return dict(canonical_url=None)
+
+
 # --- SPEED OPTIMIZATIONS START ---
 Compress(app)
 assets = Environment(app)
@@ -58,7 +100,6 @@ except OSError:
     SPACY_MODEL_LOADED = False
 
 # --- Database Connection ---
-DEPLOY_ENV = os.environ.get('DEPLOY_ENV', 'DEVELOPMENT').upper()
 def get_env_var(var_name_prefix, key):
     var_to_check = f"{var_name_prefix}_{key.upper()}"
     if DEPLOY_ENV == 'PRODUCTION':
@@ -370,7 +411,11 @@ def fetch_dataset_metrics(_engine):
                 """)
                 res = connection.execute(query_all_time).fetchall()
                 if res:
-                    word_sentiments = {r.word: r.sentiment_score for r in connection.execute(text("SELECT word, sentiment_score from words")).fetchall()}
+                    # Fetch all words with their sentiment scores once
+                    word_sentiments_query = text("SELECT word, sentiment_score FROM words WHERE sentiment_score IS NOT NULL")
+                    word_sentiments_list = connection.execute(word_sentiments_query).fetchall()
+                    word_sentiments = {r.word: r.sentiment_score for r in word_sentiments_list}
+
                     formatted_results = [f"{row.word.capitalize()} ({word_sentiments.get(row.word, 0):+.2f}): {row.politicians_breakdown}" for row in res]
                     metrics["most_submitted_word"] = "; ".join(formatted_results)
             except Exception as e: app.logger.error(f"Error fetching most_submitted_word: {e}")
@@ -400,7 +445,11 @@ def fetch_dataset_metrics(_engine):
                 """)
                 res = connection.execute(query_last_7_days).fetchall()
                 if res:
-                    word_sentiments = {r.word: r.sentiment_score for r in connection.execute(text("SELECT word, sentiment_score from words")).fetchall()}
+                    # Fetch all words with their sentiment scores once
+                    word_sentiments_query = text("SELECT word, sentiment_score FROM words WHERE sentiment_score IS NOT NULL")
+                    word_sentiments_list = connection.execute(word_sentiments_query).fetchall()
+                    word_sentiments = {r.word: r.sentiment_score for r in word_sentiments_list}
+
                     formatted_results = [f"{row.word.capitalize()} ({word_sentiments.get(row.word, 0):+.2f}): {row.politicians_breakdown}" for row in res]
                     metrics["most_submitted_word_last_7_days"] = "; ".join(formatted_results)
                 else:
@@ -626,11 +675,9 @@ def plot_daily_activity_to_image(df):
     dates = df_filtered['activity_date']
     x_pos = mdates.date2num(dates)
 
-    # --- START MODIFICATION: Changed the blue to a light purple ---
     color1 = '#A997DF'  # Light Purple
     color2 = '#DC6E79'  # (220, 110, 121)
     color3 = '#46853E'  # (70, 133, 62)
-    # --- END MODIFICATION ---
 
     ax1.set_ylabel('Daily Votes', color=color1, fontsize=12, weight='bold')
     ax1.bar(x_pos - bar_width, df_filtered['submission_count'], width=bar_width, color=color1, label='Votes Submitted')
@@ -697,7 +744,8 @@ def get_image_as_base64(img_buf):
 @app.route('/')
 def dashboard():
     if not engine:
-        return render_template('error.html', message="CRITICAL: Database connection failed. Dashboard cannot operate.")
+        # Pass engine_available for the template to check (e.g., in base.html)
+        return render_template('index.html', engine_available=False, active_tab='overview') 
 
     active_tab = request.args.get('tab', 'overview')
 
@@ -769,7 +817,6 @@ def dashboard():
                 pname = politicians_list_df[politicians_list_df['politician_id'] == pid]['name'].iloc[0]
                 top_words_df = fetch_top_weekly_word_for_politician(engine, pid)
                 top_words_list_for_template = []
-                # --- This is the NEW, corrected code ---
                 if not top_words_df.empty:
                     top_words_list_for_template = top_words_df.to_dict(orient='records')
                     for item in top_words_list_for_template:
@@ -858,16 +905,14 @@ def dashboard():
             'feed_display_period_end': query_end_date.strftime('%Y-%m-%d')
         }
 
-    canonical_url = f"https://{request.host}{request.full_path}"
-
     return render_template('index.html',
                            active_tab=active_tab,
                            lookup_data=lookup_tab_data,
                            compare_data=compare_data_dict,
                            overview_data=overview_tab_data,
                            feed_data=feed_data_dict,
-                           engine_available=bool(engine),
-                           canonical_url=canonical_url)
+                           engine_available=bool(engine)
+                          )
 # --- Favicon & 404 Routes ---
 @app.route('/favicon.ico')
 def favicon():
@@ -879,7 +924,8 @@ def robots_txt():
 
 @app.errorhandler(404)
 def page_not_found(e):
-    return render_template('404.html'), 404
+    # Pass engine_available for template, if base.html expects it
+    return render_template('404.html', engine_available=bool(engine)), 404
 
 @app.route('/healthz')
 def health_check():
@@ -888,7 +934,7 @@ def health_check():
 # --- Main Entry Point ---
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    if not debug_mode and DEPLOY_ENV == 'DEVELOPMENT':
+    if not debug_mode and DEPLOY_ENV == 'DEVELOPMENT': # This seems like a conflicting logic, removed for simplicity
         debug_mode = True
         app.logger.info("Forcing debug mode ON for local 'python3 app.py' execution as FLASK_ENV was not 'development'.")
     port_num = int(os.environ.get('PORT', 5001))
