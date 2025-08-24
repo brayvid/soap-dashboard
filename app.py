@@ -101,13 +101,32 @@ except OSError:
 
 # --- Database Connection ---
 def get_env_var(var_name_prefix, key):
-    var_to_check = f"{var_name_prefix}_{key.upper()}"
+    # Base variable name, e.g., DB_USERNAME
+    base_var_name = f"{var_name_prefix}_{key.upper()}"
+    
+    # Production-specific variable name, e.g., DB_USERNAME_PROD
+    prod_var_name = f"{base_var_name}_PROD"
+
     if DEPLOY_ENV == 'PRODUCTION':
-        var_to_check_prod = f"{var_name_prefix}_{key.upper()}_PROD"
-        val = os.environ.get(var_to_check_prod)
+        # Try the _PROD variable first (this will likely be None in your case).
+        val = os.environ.get(prod_var_name)
+        
+        # If the _PROD variable is not set, fall back to the base variable.
+        # This is the critical change: it now uses DB_USERNAME, DB_PASSWORD, etc.
+        if val is None:
+            val = os.environ.get(base_var_name)
+            if val is None:
+                 # Log a warning if neither is found, indicating a configuration issue.
+                 app.logger.error(f"CRITICAL: Missing database configuration for: '{prod_var_name}' and '{base_var_name}' (DEPLOY_ENV: {DEPLOY_ENV})")
+            # else: # Optionally log if fallback was successful
+            #      app.logger.debug(f"Using fallback: '{base_var_name}' for DB configuration in PRODUCTION.")
         return val
     else:
-        val = os.environ.get(var_to_check)
+        # For non-production, just use the base variable.
+        val = os.environ.get(base_var_name)
+        if val is None:
+            # Log a warning if the base variable is missing in non-prod too.
+            app.logger.warning(f"Missing database configuration for: {base_var_name} (DEPLOY_ENV: {DEPLOY_ENV})")
         return val
 def get_engine():
     db_config = {}
