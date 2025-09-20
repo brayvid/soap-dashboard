@@ -196,3 +196,5 @@ spacy_models/
 
 
 static/gen/
+
+.DS_Store
