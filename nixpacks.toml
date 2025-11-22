@@ -1,5 +1,29 @@
 # nixpacks.toml
-
-# This version completely overrides the default Nix packages.
 [phases.setup]
-nixPkgs = ["gcc", "python39", "postgresql_16"]
+nixPkgs = [
+  "python39",
+  "postgresql", # System-level postgres tools
+  "gcc",
+  # We install the heavy libraries via Nix (Pre-compiled)
+  "python39Packages.pip",
+  "python39Packages.pandas",
+  "python39Packages.scikit-learn",
+  "python39Packages.spacy",
+  "python39Packages.matplotlib",
+  "python39Packages.seaborn",
+  "python39Packages.sqlalchemy",
+  "python39Packages.psycopg2", # Better than binary for Prod
+  "python39Packages.gunicorn"
+]
+
+[phases.install]
+# --system-site-packages is CRITICAL. It lets the virtual env see the 
+# Nix packages installed above so pip doesn't try to reinstall/compile them.
+cmds = [
+  "python -m venv --copies --system-site-packages /opt/venv",
+  ". /opt/venv/bin/activate",
+  "pip install -r requirements.txt"
+]
+
+[start]
+cmd = "gunicorn app:app --log-file=-"

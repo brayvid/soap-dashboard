@@ -2,21 +2,21 @@
 Flask
 Flask-Assets
 Flask-Compress
-gunicorn
+# gunicorn is handled by Nix, but keeping it here is fine too.
 
-# Data, DB, & ML
-matplotlib
-pandas
-psycopg2-binary  
-scikit-learn
-seaborn
-spacy
-SQLAlchemy
+# Data & ML - (REMOVED: Handled by nixpacks.toml for speed)
+# matplotlib
+# pandas
+# psycopg2-binary
+# scikit-learn
+# seaborn
+# spacy
+# SQLAlchemy
 
 # Utilities
 cssmin
 python-dotenv
 
-# Spacy Model
-# This line installs a specific version of the model directly from GitHub.
+# Spacy Model (KEEP THIS)
+# This must be installed via pip
 https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl
