@@ -16,7 +16,6 @@ nixPkgs = [
 ]
 
 [phases.install]
-# --system-site-packages allows the venv to see the Nix packages installed above
 cmds = [
   "python -m venv --copies --system-site-packages /opt/venv",
   ". /opt/venv/bin/activate",
