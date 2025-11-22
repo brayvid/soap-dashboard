@@ -1,24 +1,22 @@
 # nixpacks.toml
 [phases.setup]
 nixPkgs = [
-  "python39",
-  "postgresql", # System-level postgres tools
+  "python311",
+  "postgresql",
   "gcc",
-  # We install the heavy libraries via Nix (Pre-compiled)
-  "python39Packages.pip",
-  "python39Packages.pandas",
-  "python39Packages.scikit-learn",
-  "python39Packages.spacy",
-  "python39Packages.matplotlib",
-  "python39Packages.seaborn",
-  "python39Packages.sqlalchemy",
-  "python39Packages.psycopg2", # Better than binary for Prod
-  "python39Packages.gunicorn"
+  "python311Packages.pip",
+  "python311Packages.pandas",
+  "python311Packages.scikit-learn",
+  "python311Packages.spacy",
+  "python311Packages.matplotlib",
+  "python311Packages.seaborn",
+  "python311Packages.sqlalchemy",
+  "python311Packages.psycopg2",
+  "python311Packages.gunicorn"
 ]
 
 [phases.install]
-# --system-site-packages is CRITICAL. It lets the virtual env see the 
-# Nix packages installed above so pip doesn't try to reinstall/compile them.
+# --system-site-packages allows the venv to see the Nix packages installed above
 cmds = [
   "python -m venv --copies --system-site-packages /opt/venv",
   ". /opt/venv/bin/activate",

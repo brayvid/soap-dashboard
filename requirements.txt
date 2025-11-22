@@ -1,22 +1,11 @@
-# Web Framework & Extensions
+# Web Framework
 Flask
 Flask-Assets
 Flask-Compress
-# gunicorn is handled by Nix, but keeping it here is fine too.
-
-# Data & ML - (REMOVED: Handled by nixpacks.toml for speed)
-# matplotlib
-# pandas
-# psycopg2-binary
-# scikit-learn
-# seaborn
-# spacy
-# SQLAlchemy
 
 # Utilities
 cssmin
 python-dotenv
 
-# Spacy Model (KEEP THIS)
-# This must be installed via pip
+# Spacy Model (Must be installed via pip)
 https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl
