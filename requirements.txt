@@ -2,10 +2,21 @@
 Flask
 Flask-Assets
 Flask-Compress
+gunicorn
+
+# Data & ML
+# Python 3.11 will download pre-compiled binaries for these
+matplotlib
+pandas
+psycopg2-binary
+scikit-learn
+seaborn
+spacy
+SQLAlchemy
 
 # Utilities
 cssmin
 python-dotenv
 
-# Spacy Model (Must be installed via pip)
+# Spacy Model
 https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl

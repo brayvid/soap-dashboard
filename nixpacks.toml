@@ -1,26 +1,14 @@
 # nixpacks.toml
 [phases.setup]
-nixPkgs = [
-  "python311",
-  "postgresql",
-  "gcc",
-  "python311Packages.pip",
-  "python311Packages.pandas",
-  "python311Packages.scikit-learn",
-  "python311Packages.spacy",
-  "python311Packages.matplotlib",
-  "python311Packages.seaborn",
-  "python311Packages.sqlalchemy",
-  "python311Packages.psycopg2",
-  "python311Packages.gunicorn"
-]
+# System packages only
+nixPkgs = ["python311", "postgresql", "gcc", "git"]
 
 [phases.install]
 cmds = [
-  "python -m venv --copies --system-site-packages /opt/venv",
+  "python -m venv --copies /opt/venv",
   ". /opt/venv/bin/activate",
   "pip install -r requirements.txt"
 ]
 
 [start]
-cmd = "gunicorn app:app --log-file=- --bind 0.0.0.0:$PORT"
+cmd = "/opt/venv/bin/gunicorn app:app --log-file=- --bind 0.0.0.0:$PORT"
