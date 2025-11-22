@@ -532,19 +532,19 @@ def fetch_dataset_metrics(_engine):
         return {key: "Error" for key in metric_keys}
     return metrics
 
-def fetch_feed_updates(_engine, start_date_dt, end_date_dt):
+def fetch_feed_updates(_engine, limit=100):
     df_cols = ["Timestamp", "Politician", "Word", "Sentiment"]
     if not _engine: return pd.DataFrame(columns=df_cols)
     query = text(f"""
         SELECT
             v.created_at AS "Timestamp", p.name AS "Politician", w.word AS "Word", w.sentiment_score AS "Sentiment"
         FROM votes v JOIN words w ON v.word_id = w.word_id JOIN politicians p ON v.politician_id = p.politician_id
-        WHERE v.created_at >= :start_date AND v.created_at <= :end_date
-        ORDER BY v.created_at DESC;
+        ORDER BY v.created_at DESC
+        LIMIT :limit;
     """)
     try:
         with _engine.connect() as connection:
-            df = pd.read_sql(query, connection, params={'start_date': start_date_dt, 'end_date': end_date_dt})
+            df = pd.read_sql(query, connection, params={'limit': limit})
         if not df.empty:
             if 'Timestamp' in df.columns:
                 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
@@ -908,20 +908,18 @@ def dashboard():
         if not daily_activity_df.empty:
             activity_graph_buf = plot_daily_activity_to_image(daily_activity_df)
             activity_graph_img_base64 = get_image_as_base64(activity_graph_buf)
-        today = datetime.date.today()
-        query_end_date = today
-        query_start_date = today - datetime.timedelta(days=6)
-        start_dt_feed = datetime.datetime.combine(query_start_date, datetime.time.min)
-        end_dt_feed = datetime.datetime.combine(query_end_date, datetime.time.max)
-        feed_df = fetch_feed_updates(engine, start_dt_feed, end_dt_feed)
+        
+        # Fetch last 100 items regardless of date
+        feed_df = fetch_feed_updates(engine, limit=100)
+        
         feed_list_for_template = []
         if not feed_df.empty:
             feed_list_for_template = feed_df.to_dict(orient='records')
         feed_data_dict = {
             'activity_graph_img_base64': activity_graph_img_base64,
             'latest_feed_items': feed_list_for_template,
-            'feed_display_period_start': query_start_date.strftime('%Y-%m-%d'),
-            'feed_display_period_end': query_end_date.strftime('%Y-%m-%d')
+            'feed_display_period_start': None,
+            'feed_display_period_end': None
         }
 
     return render_template('index.html',
