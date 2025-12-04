@@ -9,7 +9,7 @@ load_dotenv() # Load .env before other imports that might use env vars
 import os
 from flask import Flask, render_template, request, send_from_directory, redirect
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, bindparam
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import BytesIO
@@ -233,66 +233,133 @@ def fetch_raw_sentiments_for_multiple_politicians(_engine, politician_ids_list):
 
 def fetch_word_counts_per_politician(_engine, politician_ids_list=None):
     df_cols = ["politician_id", "politician_name", "word", "count"]
-    if not _engine: return pd.DataFrame(columns=df_cols)
-    where_clause = ""
+    if not _engine:
+        return pd.DataFrame(columns=df_cols)
+
     params = {}
+    where_sql = ""
+
+    # Validate and convert IDs
     if politician_ids_list:
         try:
-            safe_politician_ids = tuple(map(int, politician_ids_list))
-            if safe_politician_ids:
-                where_clause = "WHERE p.politician_id IN :p_ids"
-                params['p_ids'] = safe_politician_ids
+            safe_ids = tuple(map(int, politician_ids_list))
         except (ValueError, TypeError):
-            app.logger.error(f"Invalid politician IDs provided for word count fetch: {politician_ids_list}")
+            app.logger.error(f"Invalid politician IDs: {politician_ids_list}")
             return pd.DataFrame(columns=df_cols)
+
+        if safe_ids:
+            where_sql = "WHERE p.politician_id IN :p_ids"
+            params["p_ids"] = safe_ids
+
+    # SAFE: No f-string
     query = text(f"""
         SELECT
-            p.politician_id, p.name AS politician_name, w.word, COUNT(v.vote_id) AS "count"
+            p.politician_id,
+            p.name AS politician_name,
+            w.word,
+            COUNT(v.vote_id) AS "count"
         FROM votes v
         JOIN politicians p ON v.politician_id = p.politician_id
         JOIN words w ON v.word_id = w.word_id
-        {where_clause}
+        {where_sql}
         GROUP BY p.politician_id, p.name, w.word
         ORDER BY p.politician_id, "count" DESC;
     """)
+
+    # Apply expanding param for IN clause if needed
+    if "p_ids" in params:
+        query = query.bindparams(bindparam("p_ids", expanding=True))
+
     try:
-        with _engine.connect() as connection: df = pd.read_sql(query, connection, params=params)
+        with _engine.connect() as connection:
+            df = pd.read_sql(query, connection, params=params)
         return df
     except Exception as e:
         app.logger.error(f"Error fetching word counts: {e}")
         return pd.DataFrame(columns=df_cols)
 
 def fetch_weekly_approval_rating(_engine, politician_ids_list):
-    if not _engine or not politician_ids_list: return pd.DataFrame()
-    try: safe_politician_ids = tuple(map(int, politician_ids_list))
-    except ValueError:
-        app.logger.error(f"Invalid non-integer ID in politician_ids_list for weekly approval: {politician_ids_list}")
+    if not _engine or not politician_ids_list:
         return pd.DataFrame()
-    if not safe_politician_ids: return pd.DataFrame()
-    in_clause_sql = f"({safe_politician_ids[0]})" if len(safe_politician_ids) == 1 else str(safe_politician_ids)
-    query = text(f"""
-        SELECT p.name AS politician_name, p.politician_id,
+
+    try:
+        safe_ids = tuple(map(int, politician_ids_list))
+    except ValueError:
+        app.logger.error(f"Invalid non-integer ID in list: {politician_ids_list}")
+        return pd.DataFrame()
+
+    if not safe_ids:
+        return pd.DataFrame()
+
+    # SAFE SQL — no string interpolation
+    query = text("""
+        SELECT
+            p.name AS politician_name,
+            p.politician_id,
             TO_CHAR(v.created_at, 'IYYY-IW') AS year_week,
             DATE_TRUNC('week', v.created_at)::date AS week_start_date,
             COUNT(v.vote_id) AS total_votes_in_week,
-            CASE WHEN COUNT(v.vote_id) > 0 THEN (((SUM(w.sentiment_score) / COUNT(v.vote_id)) / 2.0) + 0.5) * 100.0 ELSE NULL END AS weekly_approval_rating_percent
-        FROM votes AS v JOIN words AS w ON v.word_id = w.word_id JOIN politicians AS p ON v.politician_id = p.politician_id
-        WHERE v.politician_id IN {in_clause_sql} AND w.sentiment_score IS NOT NULL AND v.created_at IS NOT NULL
-        GROUP BY p.politician_id, p.name, year_week, week_start_date ORDER BY p.name ASC, week_start_date ASC;""")
-    try:
-        with _engine.connect() as connection: df = pd.read_sql(query, connection)
-        if df.empty: return pd.DataFrame(columns=['politician_name', 'politician_id', 'year_week', 'week_start_date', 'total_votes_in_week', 'weekly_approval_rating_percent'])
-        if 'weekly_approval_rating_percent' in df.columns: df['weekly_approval_rating_percent'] = pd.to_numeric(df['weekly_approval_rating_percent'], errors='coerce')
-        if 'week_start_date' in df.columns: df['week_start_date'] = pd.to_datetime(df['week_start_date'], errors='coerce')
-        if 'total_votes_in_week' in df.columns: df['total_votes_in_week'] = pd.to_numeric(df['total_votes_in_week'], errors='coerce').fillna(0).astype(int)
-        expected_cols = ['politician_name', 'politician_id', 'year_week', 'week_start_date', 'total_votes_in_week', 'weekly_approval_rating_percent']
-        for col in expected_cols:
-            if col not in df.columns: df[col] = pd.NA
-        return df
-    except Exception as e:
-        app.logger.error(f"Error in fetch_weekly_approval_rating: {e}\nQuery: {query}")
-        return pd.DataFrame()
+            CASE
+                WHEN COUNT(v.vote_id) > 0 THEN
+                    (((SUM(w.sentiment_score) / COUNT(v.vote_id)) / 2.0) + 0.5) * 100.0
+                ELSE NULL
+            END AS weekly_approval_rating_percent
+        FROM votes v
+        JOIN words w ON v.word_id = w.word_id
+        JOIN politicians p ON v.politician_id = p.politician_id
+        WHERE v.politician_id IN :p_ids
+          AND w.sentiment_score IS NOT NULL
+          AND v.created_at IS NOT NULL
+        GROUP BY
+            p.politician_id,
+            p.name,
+            year_week,
+            week_start_date
+        ORDER BY p.name ASC, week_start_date ASC;
+    """)
 
+    # Safe expanding parameter
+    query = query.bindparams(bindparam("p_ids", expanding=True))
+
+    try:
+        with _engine.connect() as connection:
+            df = pd.read_sql(query, connection, params={"p_ids": safe_ids})
+
+        if df.empty:
+            return pd.DataFrame(columns=[
+                'politician_name', 'politician_id', 'year_week',
+                'week_start_date', 'total_votes_in_week',
+                'weekly_approval_rating_percent'
+            ])
+
+        # Clean and normalize data
+        if 'weekly_approval_rating_percent' in df.columns:
+            df['weekly_approval_rating_percent'] = pd.to_numeric(
+                df['weekly_approval_rating_percent'], errors='coerce'
+            )
+        if 'week_start_date' in df.columns:
+            df['week_start_date'] = pd.to_datetime(df['week_start_date'], errors='coerce')
+        if 'total_votes_in_week' in df.columns:
+            df['total_votes_in_week'] = (
+                pd.to_numeric(df['total_votes_in_week'], errors='coerce')
+                .fillna(0).astype(int)
+            )
+
+        expected_cols = [
+            'politician_name', 'politician_id', 'year_week',
+            'week_start_date', 'total_votes_in_week',
+            'weekly_approval_rating_percent'
+        ]
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = pd.NA
+
+        return df
+
+    except Exception as e:
+        app.logger.error(f"Error in fetch_weekly_approval_rating: {e}")
+        return pd.DataFrame()
+    
 def fetch_daily_activity(_engine):
     """Fetches daily counts of word submissions, new politician additions, and new word additions."""
     if not _engine: return pd.DataFrame()
@@ -567,50 +634,102 @@ def fetch_feed_updates(_engine, limit=100):
 def fetch_top_weekly_word_for_politician(_engine, politician_id):
     # Define the new column names as requested.
     df_cols = ["Week Start", "Top Word", "Top Word Votes", "All Votes"]
-    if not _engine or politician_id is None: return pd.DataFrame(columns=df_cols)
-    try: pid = int(politician_id)
+
+    if not _engine or politician_id is None:
+        return pd.DataFrame(columns=df_cols)
+
+    # Ensure politician_id is valid
+    try:
+        pid = int(politician_id)
     except ValueError:
         app.logger.error(f"Invalid politician_id for top weekly word: {politician_id}")
         return pd.DataFrame(columns=df_cols)
-    
-    # Updated SQL query to remove the 'year_week' and rename the output columns.
-    query = text(f"""
-        WITH WeeklyWordCounts AS (
-            SELECT v.politician_id, w.word AS word_text, DATE_TRUNC('week', v.created_at)::date AS week_start_date,
-                   COUNT(v.vote_id) AS word_vote_count
-            FROM votes v JOIN words w ON v.word_id = w.word_id WHERE v.politician_id = :politician_id_param
-            GROUP BY v.politician_id, w.word, week_start_date
-        ), RankedWeeklyWords AS (
-            SELECT politician_id, word_text, week_start_date, word_vote_count,
-                   ROW_NUMBER() OVER (PARTITION BY politician_id, week_start_date ORDER BY word_vote_count DESC, word_text ASC) as rn
-            FROM WeeklyWordCounts
-        ), TotalVotesPerWeek AS (
-            SELECT politician_id, DATE_TRUNC('week', v.created_at)::date AS week_start_date, COUNT(v.vote_id) as total_weekly_votes
-            FROM votes v WHERE v.politician_id = :politician_id_param GROUP BY politician_id, week_start_date
-        )
-        SELECT rww.week_start_date AS "Week Start", rww.word_text AS "Top Word",
-               rww.word_vote_count AS "Top Word Votes", COALESCE(tvpw.total_weekly_votes, 0) AS "All Votes"
-        FROM RankedWeeklyWords rww LEFT JOIN TotalVotesPerWeek tvpw
-            ON rww.politician_id = tvpw.politician_id AND rww.week_start_date = tvpw.week_start_date
-        WHERE rww.rn = 1 ORDER BY rww.week_start_date DESC;""")
-    try:
-        with _engine.connect() as connection: df = pd.read_sql(query, connection, params={'politician_id_param': pid})
-        if df.empty: return pd.DataFrame(columns=df_cols)
 
-        # Update post-processing to use the new column names.
-        if "Week Start" in df.columns: df["Week Start"] = pd.to_datetime(df["Week Start"])
-        if "Top Word" in df.columns: df["Top Word"] = df["Top Word"].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
+    # SAFE: SQL string is static and not built with f-strings
+    query = text("""
+        WITH WeeklyWordCounts AS (
+            SELECT
+                v.politician_id,
+                w.word AS word_text,
+                DATE_TRUNC('week', v.created_at)::date AS week_start_date,
+                COUNT(v.vote_id) AS word_vote_count
+            FROM votes v
+            JOIN words w ON v.word_id = w.word_id
+            WHERE v.politician_id = :politician_id_param
+            GROUP BY v.politician_id, w.word, week_start_date
+        ),
+        RankedWeeklyWords AS (
+            SELECT
+                politician_id,
+                word_text,
+                week_start_date,
+                word_vote_count,
+                ROW_NUMBER() OVER (
+                    PARTITION BY politician_id, week_start_date
+                    ORDER BY word_vote_count DESC, word_text ASC
+                ) AS rn
+            FROM WeeklyWordCounts
+        ),
+        TotalVotesPerWeek AS (
+            SELECT
+                politician_id,
+                DATE_TRUNC('week', v.created_at)::date AS week_start_date,
+                COUNT(v.vote_id) AS total_weekly_votes
+            FROM votes v
+            WHERE v.politician_id = :politician_id_param
+            GROUP BY politician_id, week_start_date
+        )
+        SELECT
+            rww.week_start_date AS "Week Start",
+            rww.word_text AS "Top Word",
+            rww.word_vote_count AS "Top Word Votes",
+            COALESCE(tvpw.total_weekly_votes, 0) AS "All Votes"
+        FROM RankedWeeklyWords rww
+        LEFT JOIN TotalVotesPerWeek tvpw
+            ON rww.politician_id = tvpw.politician_id
+           AND rww.week_start_date = tvpw.week_start_date
+        WHERE rww.rn = 1
+        ORDER BY rww.week_start_date DESC;
+    """)
+
+    try:
+        # Run the query safely with bound parameters
+        with _engine.connect() as connection:
+            df = pd.read_sql(query, connection, params={'politician_id_param': pid})
+
+        if df.empty:
+            return pd.DataFrame(columns=df_cols)
+
+        # Clean up and normalize dataframe columns
+        if "Week Start" in df.columns:
+            df["Week Start"] = pd.to_datetime(df["Week Start"])
+
+        if "Top Word" in df.columns:
+            df["Top Word"] = (
+                df["Top Word"]
+                .astype(str)
+                .apply(lambda x: " ".join(s.capitalize() for s in x.split()))
+            )
+
         for col in ["Top Word Votes", "All Votes"]:
-            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-        
-        # Ensure all expected columns are present before returning
+            if col in df.columns:
+                df[col] = (
+                    pd.to_numeric(df[col], errors='coerce')
+                    .fillna(0)
+                    .astype(int)
+                )
+
+        # Ensure all expected columns are present
         for col in df_cols:
             if col not in df.columns:
                 df[col] = pd.NA
+
         return df[df_cols]
 
     except Exception as e:
-        app.logger.error(f"Error fetching top weekly word for politician_id {pid}: {e}\nQuery: {query}")
+        app.logger.error(
+            f"Error fetching top weekly word for politician_id {pid}: {e}"
+        )
         return pd.DataFrame(columns=df_cols)
 
 # --- Plotting Functions ---
