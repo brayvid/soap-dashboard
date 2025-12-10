@@ -23,10 +23,11 @@
 <body>
   <!-- Navbar -->
 <nav class="navbar">
-    <a href="https://www.use.soap.fyi">Home</a>
+    <a href="https://use.soap.fyi">Home</a>
     <div class="navbar-title">Soap Dashboard</div>
     <div class="navbar-right-menu">
-        <a href="/">Dash</a>
+        <!-- Updated to use the new overview route -->
+        <a href="{{ url_for('route_overview') }}">Dash</a>
     </div>
 </nav>
 
@@ -34,7 +35,7 @@
   <main style="text-align: center; padding: 4rem 1rem;">
     <section style="
       max-width: 600px;
-      margin: 20px auto; /* Adjusted margin to account for fixed navbar */
+      margin: 20px auto; 
       background: white;
       border-radius: 8px;
       padding: 2rem;
@@ -44,13 +45,14 @@
       <p style="font-size: 1.25rem; margin-bottom: 2rem;">
         Oops! The page you're looking for doesn't exist.
       </p>
-      <a href="{{ url_for('dashboard') }}" style="color: #76B0DF; font-weight: bold; text-decoration: none;">← Back to Dashboard</a>
+      <!-- Updated function name from 'dashboard' to 'route_overview' -->
+      <a href="{{ url_for('route_overview') }}" style="color: #76B0DF; font-weight: bold; text-decoration: none;">← Back to Dashboard</a>
     </section>
   </main>
 
   <!-- Footer -->
   <footer class="footer">
-      <p>&copy; Copyright 2024-<span id="currentYear"></span> <a class="footer-link" href="https://www.soap.fyi">soap.fyi</a><br>All rights reserved. <a class="footer-link" href="https://www.soap.fyi/terms">Terms & Conditions</a></p>
+      <p>&copy; Copyright 2024-<span id="currentYear"></span> <a class="footer-link" href="https://soap.fyi">soap.fyi</a><br>All rights reserved. <a class="footer-link" href="https://soap.fyi/terms">Terms & Conditions</a></p>
   </footer>
   <script>
     // Get the current year

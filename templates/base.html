@@ -19,16 +19,14 @@
     
     <link rel="icon" href="{{ url_for('favicon') }}" type="image/x-icon">
 
-    {# 1. REMOVED the old Google Fonts link. Fonts are now in your CSS. #}
-
-    {# 2. INLINE CRITICAL CSS: Paste the minimal CSS needed for the above-the-fold content here. #}
+    {# 2. INLINE CRITICAL CSS #}
     <style>
       body { font-family: 'Inter', sans-serif; background-color: #fff; color: #212529; display: flex; flex-direction: column; min-height: 100vh; margin: 0;}
       .navbar { display: flex; justify-content: space-between; padding: 1rem; border-bottom: 1px solid #e9ecef;}
       .footer { text-align: center; padding: 1rem; margin-top: auto; font-size: 0.9rem; color: #6c757d; }
     </style>
 
-    {# 3. LOAD FULL STYLESHEET ASYNCHRONOUSLY using the Flask-Assets bundle we created. #}
+    {# 3. LOAD FULL STYLESHEET ASYNCHRONOUSLY #}
     {% assets "css_all" %}
       <link rel="stylesheet" href="{{ ASSET_URL }}" media="print" onload="this.media='all'">
     {% endassets %}
@@ -45,13 +43,13 @@
     {% block head_extra %}{% endblock %}
 </head>
 <body>
-    <!-- Navbar - matching index.html structure -->
+    <!-- Navbar -->
     <nav class="navbar">
-        {# UPDATED: Changed the Home link to non-www #}
         <a href="https://use.soap.fyi">Home</a>
         <div class="navbar-title">Soap Dashboard</div>
         <div class="navbar-right-menu">
-            <a href="/">Dash</a>
+            <!-- UPDATED: Links directly to /overview instead of / -->
+            <a href="{{ url_for('route_overview') }}">Dash</a>
         </div>
     </nav>
 
@@ -72,7 +70,8 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <p>© Copyright 2024-<span id="currentYear"></span> <a class="footer-link" href="https://www.soap.fyi">soap.fyi</a><br>All rights reserved. <a class="footer-link" href="https://www.soap.fyi/terms">Terms & Conditions</a></p>
+        <!-- UPDATED: Removed www. to match app.py logic -->
+        <p>© Copyright 2024-<span id="currentYear"></span> <a class="footer-link" href="https://soap.fyi">soap.fyi</a><br>All rights reserved. <a class="footer-link" href="https://soap.fyi/terms">Terms & Conditions</a></p>
     </footer>
     <script>
     // Get the current year

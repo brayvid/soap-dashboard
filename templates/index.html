@@ -6,13 +6,13 @@
 {% block content %}
 
     <nav class="dashboard-tabs" style="margin-bottom: 20px; text-align: center;">
-        <a href="{{ url_for('dashboard', tab='overview') }}"
+        <a href="{{ url_for('route_overview') }}"
         class="tab-link {% if active_tab == 'overview' %}active{% endif %}">Overview</a>
-        <a href="{{ url_for('dashboard', tab='lookup') }}"
+        <a href="{{ url_for('route_lookup') }}"
         class="tab-link {% if active_tab == 'lookup' %}active{% endif %}">Lookup</a>
-        <a href="{{ url_for('dashboard', tab='compare') }}"
+        <a href="{{ url_for('route_compare') }}"
         class="tab-link {% if active_tab == 'compare' %}active{% endif %}">Compare</a>
-        <a href="{{ url_for('dashboard', tab='feed') }}"
+        <a href="{{ url_for('route_feed') }}"
         class="tab-link {% if active_tab == 'feed' %}active{% endif %}">Feed</a>
     </nav>
     <hr style="margin-bottom: 20px;">
@@ -91,8 +91,9 @@
                 <h2>Politician Lookup</h2>
                 <p>Select one or more politicians to see a detailed breakdown of their approval trend, sentiment distribution, and most frequently used words.</p>
 
-                <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
-                    <input type="hidden" name="tab" value="lookup">
+                <!-- UPDATED FORM ACTION, REMOVED HIDDEN TAB INPUT -->
+                <form method="GET" action="{{ url_for('route_lookup') }}" class="filter-form" style="margin-bottom:1.5rem;">
+                    
                     <div class="form-group" style="margin-bottom: 1rem;">
                         <label for="politician_multiselector_lookup" class="form-label">Select Politicians:</label>
                         <p><small><input type="checkbox" name="politician_select_mode_lookup" value="All" {% if 'All' in request.args.get('politician_select_mode_lookup', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available (Top {{lookup_data.MAX_LOOKUP_POLITICIANS}} by total votes)</small></p>
@@ -191,8 +192,9 @@
                 <h2>Semantic Comparison</h2>
                 <p>Compare politicians pairwise based on the definitions of words used to describe them. A score closer to 1 indicates that the two collections are more similar in meaning.</p>
 
-                <form method="GET" action="{{ url_for('dashboard') }}" class="filter-form" style="margin-bottom:1.5rem;">
-                    <input type="hidden" name="tab" value="compare">
+                <!-- UPDATED FORM ACTION, REMOVED HIDDEN TAB INPUT -->
+                <form method="GET" action="{{ url_for('route_compare') }}" class="filter-form" style="margin-bottom:1.5rem;">
+                    
                     <div class="form-group" style="margin-bottom: 1rem;">
                         <label for="politician_multiselector_compare" class="form-label">Select Politicians:</label>
                         <p><small><input type="checkbox" name="politician_select_mode_compare" value="All" {% if 'All' in request.args.get('politician_select_mode_compare', '') %}checked{% endif %} onchange="this.form.submit()"> Select All Available (Top {{compare_data.MAX_HEATMAP_POLITICIANS}} by total votes)</small></p>

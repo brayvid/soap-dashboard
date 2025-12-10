@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 load_dotenv() # Load .env before other imports that might use env vars
 
 import os
-from flask import Flask, render_template, request, send_from_directory, redirect
+# Added url_for to imports
+from flask import Flask, render_template, request, send_from_directory, redirect, url_for
 import pandas as pd
 from sqlalchemy import create_engine, text, bindparam
 import matplotlib.pyplot as plt
@@ -34,38 +35,29 @@ DEPLOY_ENV = os.environ.get('DEPLOY_ENV', 'DEVELOPMENT').upper()
 
 # ===================================================================
 # --- FIX 1: REDIRECT WWW TO NON-WWW ---
-# This middleware runs before every request to enforce the canonical domain.
-# It should always be active, not just in production.
 # ===================================================================
 @app.before_request
 def redirect_to_non_www():
     """Redirect www requests to non-www to enforce canonical URL."""
-    # Check if the request is on the www subdomain and not a health check
     if request.host.startswith('www.') and request.path != '/healthz':
-        # Construct the new URL by removing 'www.'
         new_url = request.url.replace('www.', '', 1)
-        # Issue a permanent redirect (301)
         app.logger.info(f"Redirecting from www to non-www: {request.url} -> {new_url}")
         return redirect(new_url, code=301)
 
 # ===================================================================
 # --- FIX 2: AUTOMATICALLY PROVIDE CORRECT CANONICAL URL TO ALL TEMPLATES ---
-# This context processor makes `canonical_url` available in every template.
-# It is now environment-aware.
 # ===================================================================
 @app.context_processor
 def inject_canonical_url():
     """
     Makes the canonical URL for the current page available to all templates.
-    Uses a configured production URL in DEPLOY_ENV='PRODUCTION', otherwise omits it.
     """
     if DEPLOY_ENV == 'PRODUCTION':
         canonical_base_url = os.environ.get('DASHBOARD_CANONICAL_BASE_URL')
         if canonical_base_url:
-            # Reconstruct the URL using the canonical host and the current path
+            # request.path will now range from /overview to /lookup etc automatically
             canonical_url_full = urljoin(canonical_base_url, request.path)
 
-            # Add query string if present
             if request.query_string:
                 canonical_url_full += '?' + request.query_string.decode('utf-8')
             
@@ -73,11 +65,8 @@ def inject_canonical_url():
             return dict(canonical_url=canonical_url_full)
         else:
             app.logger.warning("DASHBOARD_CANONICAL_BASE_URL not set in PRODUCTION. Canonical tag will be omitted.")
-            return dict(canonical_url=None) # Explicitly set to None
+            return dict(canonical_url=None)
     else:
-        # In development or other non-production environments, do not render a canonical tag.
-        # This prevents incorrect local hostnames from being used.
-        app.logger.debug(f"Canonical tag omitted for non-PRODUCTION environment (current host: {request.host}).")
         return dict(canonical_url=None)
 
 
@@ -101,33 +90,22 @@ except OSError:
 
 # --- Database Connection ---
 def get_env_var(var_name_prefix, key):
-    # Base variable name, e.g., DB_USERNAME
     base_var_name = f"{var_name_prefix}_{key.upper()}"
-    
-    # Production-specific variable name, e.g., DB_USERNAME_PROD
     prod_var_name = f"{base_var_name}_PROD"
 
     if DEPLOY_ENV == 'PRODUCTION':
-        # Try the _PROD variable first (this will likely be None in your case).
         val = os.environ.get(prod_var_name)
-        
-        # If the _PROD variable is not set, fall back to the base variable.
-        # This is the critical change: it now uses DB_USERNAME, DB_PASSWORD, etc.
         if val is None:
             val = os.environ.get(base_var_name)
             if val is None:
-                 # Log a warning if neither is found, indicating a configuration issue.
                  app.logger.error(f"CRITICAL: Missing database configuration for: '{prod_var_name}' and '{base_var_name}' (DEPLOY_ENV: {DEPLOY_ENV})")
-            # else: # Optionally log if fallback was successful
-            #      app.logger.debug(f"Using fallback: '{base_var_name}' for DB configuration in PRODUCTION.")
         return val
     else:
-        # For non-production, just use the base variable.
         val = os.environ.get(base_var_name)
         if val is None:
-            # Log a warning if the base variable is missing in non-prod too.
             app.logger.warning(f"Missing database configuration for: {base_var_name} (DEPLOY_ENV: {DEPLOY_ENV})")
         return val
+
 def get_engine():
     db_config = {}
     required_keys = ["username", "password", "host", "database"]
@@ -238,20 +216,16 @@ def fetch_word_counts_per_politician(_engine, politician_ids_list=None):
 
     params = {}
     where_sql = ""
-
-    # Validate and convert IDs
     if politician_ids_list:
         try:
             safe_ids = tuple(map(int, politician_ids_list))
         except (ValueError, TypeError):
             app.logger.error(f"Invalid politician IDs: {politician_ids_list}")
             return pd.DataFrame(columns=df_cols)
-
         if safe_ids:
             where_sql = "WHERE p.politician_id IN :p_ids"
             params["p_ids"] = safe_ids
 
-    # SAFE: No f-string
     query = text(f"""
         SELECT
             p.politician_id,
@@ -265,8 +239,6 @@ def fetch_word_counts_per_politician(_engine, politician_ids_list=None):
         GROUP BY p.politician_id, p.name, w.word
         ORDER BY p.politician_id, "count" DESC;
     """)
-
-    # Apply expanding param for IN clause if needed
     if "p_ids" in params:
         query = query.bindparams(bindparam("p_ids", expanding=True))
 
@@ -279,19 +251,11 @@ def fetch_word_counts_per_politician(_engine, politician_ids_list=None):
         return pd.DataFrame(columns=df_cols)
 
 def fetch_weekly_approval_rating(_engine, politician_ids_list):
-    if not _engine or not politician_ids_list:
-        return pd.DataFrame()
+    if not _engine or not politician_ids_list: return pd.DataFrame()
+    try: safe_ids = tuple(map(int, politician_ids_list))
+    except ValueError: return pd.DataFrame()
+    if not safe_ids: return pd.DataFrame()
 
-    try:
-        safe_ids = tuple(map(int, politician_ids_list))
-    except ValueError:
-        app.logger.error(f"Invalid non-integer ID in list: {politician_ids_list}")
-        return pd.DataFrame()
-
-    if not safe_ids:
-        return pd.DataFrame()
-
-    # SAFE SQL — no string interpolation
     query = text("""
         SELECT
             p.name AS politician_name,
@@ -317,65 +281,28 @@ def fetch_weekly_approval_rating(_engine, politician_ids_list):
             week_start_date
         ORDER BY p.name ASC, week_start_date ASC;
     """)
-
-    # Safe expanding parameter
     query = query.bindparams(bindparam("p_ids", expanding=True))
-
     try:
         with _engine.connect() as connection:
             df = pd.read_sql(query, connection, params={"p_ids": safe_ids})
-
         if df.empty:
-            return pd.DataFrame(columns=[
-                'politician_name', 'politician_id', 'year_week',
-                'week_start_date', 'total_votes_in_week',
-                'weekly_approval_rating_percent'
-            ])
-
-        # Clean and normalize data
+            return pd.DataFrame(columns=['politician_name', 'politician_id', 'year_week', 'week_start_date', 'total_votes_in_week', 'weekly_approval_rating_percent'])
         if 'weekly_approval_rating_percent' in df.columns:
-            df['weekly_approval_rating_percent'] = pd.to_numeric(
-                df['weekly_approval_rating_percent'], errors='coerce'
-            )
+            df['weekly_approval_rating_percent'] = pd.to_numeric(df['weekly_approval_rating_percent'], errors='coerce')
         if 'week_start_date' in df.columns:
             df['week_start_date'] = pd.to_datetime(df['week_start_date'], errors='coerce')
         if 'total_votes_in_week' in df.columns:
-            df['total_votes_in_week'] = (
-                pd.to_numeric(df['total_votes_in_week'], errors='coerce')
-                .fillna(0).astype(int)
-            )
-
-        expected_cols = [
-            'politician_name', 'politician_id', 'year_week',
-            'week_start_date', 'total_votes_in_week',
-            'weekly_approval_rating_percent'
-        ]
-        for col in expected_cols:
-            if col not in df.columns:
-                df[col] = pd.NA
-
+            df['total_votes_in_week'] = (pd.to_numeric(df['total_votes_in_week'], errors='coerce').fillna(0).astype(int))
         return df
-
     except Exception as e:
         app.logger.error(f"Error in fetch_weekly_approval_rating: {e}")
         return pd.DataFrame()
     
 def fetch_daily_activity(_engine):
-    """Fetches daily counts of word submissions, new politician additions, and new word additions."""
     if not _engine: return pd.DataFrame()
-
-    submissions_query = text("""
-        SELECT DATE(created_at) AS activity_date, COUNT(vote_id) AS submission_count
-        FROM votes WHERE created_at IS NOT NULL GROUP BY activity_date;
-    """)
-    additions_query = text("""
-        SELECT DATE(created_at) AS activity_date, COUNT(politician_id) AS addition_count
-        FROM politicians WHERE created_at IS NOT NULL GROUP BY activity_date;
-    """)
-    new_words_query = text("""
-        SELECT DATE(created_at) AS activity_date, COUNT(word_id) AS new_word_count
-        FROM words WHERE created_at IS NOT NULL GROUP BY activity_date;
-    """)
+    submissions_query = text("SELECT DATE(created_at) AS activity_date, COUNT(vote_id) AS submission_count FROM votes WHERE created_at IS NOT NULL GROUP BY activity_date;")
+    additions_query = text("SELECT DATE(created_at) AS activity_date, COUNT(politician_id) AS addition_count FROM politicians WHERE created_at IS NOT NULL GROUP BY activity_date;")
+    new_words_query = text("SELECT DATE(created_at) AS activity_date, COUNT(word_id) AS new_word_count FROM words WHERE created_at IS NOT NULL GROUP BY activity_date;")
 
     try:
         with _engine.connect() as connection:
@@ -384,37 +311,24 @@ def fetch_daily_activity(_engine):
             new_words_df = pd.read_sql(new_words_query, connection)
 
         for df in [submissions_df, additions_df, new_words_df]:
-            if not df.empty:
-                df['activity_date'] = pd.to_datetime(df['activity_date'])
+            if not df.empty: df['activity_date'] = pd.to_datetime(df['activity_date'])
 
         if submissions_df.empty and additions_df.empty and new_words_df.empty:
             return pd.DataFrame(columns=['activity_date', 'submission_count', 'addition_count', 'new_word_count'])
 
-        # Merge all three dataframes
         activity_df = pd.merge(submissions_df, additions_df, on='activity_date', how='outer')
         activity_df = pd.merge(activity_df, new_words_df, on='activity_date', how='outer')
-
         activity_df.fillna(0, inplace=True)
-        activity_df['submission_count'] = activity_df['submission_count'].astype(int)
-        activity_df['addition_count'] = activity_df['addition_count'].astype(int)
-        activity_df['new_word_count'] = activity_df['new_word_count'].astype(int)
+        for col in ['submission_count', 'addition_count', 'new_word_count']:
+            activity_df[col] = activity_df[col].astype(int)
         activity_df.sort_values('activity_date', inplace=True)
         return activity_df
-
     except Exception as e:
         app.logger.error(f"Error in fetch_daily_activity: {e}")
         return pd.DataFrame()
     
 def fetch_dataset_metrics(_engine):
-    metric_keys = [
-        "total_politicians", "total_words_scorable", "total_votes", "votes_date_range",
-        "net_sentiment_sum_all_submissions", "average_sentiment_score_all_submissions",
-        "net_approval_rating_percent_all_submissions", "avg_submissions_per_politician",
-        "submissions_last_7_days", "most_active_day", "most_described_politician",
-        "highest_rated_politician", "lowest_rated_politician",
-        "most_submitted_word", "most_submitted_word_last_7_days",
-        "most_positive_word_attribution", "most_negative_word_attribution"
-    ]
+    metric_keys = ["total_politicians", "total_words_scorable", "total_votes", "votes_date_range", "net_sentiment_sum_all_submissions", "average_sentiment_score_all_submissions", "net_approval_rating_percent_all_submissions", "avg_submissions_per_politician", "submissions_last_7_days", "most_active_day", "most_described_politician", "highest_rated_politician", "lowest_rated_politician", "most_submitted_word", "most_submitted_word_last_7_days", "most_positive_word_attribution", "most_negative_word_attribution"]
     if not _engine: return {key: "N/A" for key in metric_keys}
     metrics = {key: "N/A" for key in metric_keys}
     MIN_VOTES_FOR_RATING = 20
@@ -435,8 +349,7 @@ def fetch_dataset_metrics(_engine):
             if total_votes_num > 0 and total_politicians_num > 0:
                 metrics["avg_submissions_per_politician"] = f"{(total_votes_num / total_politicians_num):.1f}"
 
-            try:
-                metrics["submissions_last_7_days"] = f"{connection.execute(text('''SELECT COUNT(*) FROM votes WHERE created_at >= NOW() - INTERVAL '7 days';''')).scalar_one():,}"
+            try: metrics["submissions_last_7_days"] = f"{connection.execute(text('''SELECT COUNT(*) FROM votes WHERE created_at >= NOW() - INTERVAL '7 days';''')).scalar_one():,}"
             except Exception as e: app.logger.error(f"Error fetching submissions_last_7_days: {e}")
             
             sentiment_query = text("SELECT SUM(w.sentiment_score), COUNT(v.vote_id) FROM votes v JOIN words w ON v.word_id = w.word_id WHERE w.sentiment_score IS NOT NULL;")
@@ -449,24 +362,15 @@ def fetch_dataset_metrics(_engine):
                 approval_percent = (((avg_score / 2.0) + 0.5) * 100.0)
                 metrics["net_approval_rating_percent_all_submissions"] = f"{approval_percent:.2f}%"
             try:
-                res = connection.execute(text("""
-                    WITH r AS (SELECT DATE(created_at) d, COUNT(*) c, RANK() OVER (ORDER BY COUNT(*) DESC) rnk FROM votes GROUP BY d)
-                    SELECT d, c FROM r WHERE rnk = 1;
-                """)).fetchall()
+                res = connection.execute(text("WITH r AS (SELECT DATE(created_at) d, COUNT(*) c, RANK() OVER (ORDER BY COUNT(*) DESC) rnk FROM votes GROUP BY d) SELECT d, c FROM r WHERE rnk = 1;")).fetchall()
                 if res: metrics["most_active_day"] = ", ".join([f"{d.strftime('%Y-%m-%d')} ({c} submissions)" for d, c in res])
             except Exception as e: app.logger.error(f"Error fetching most_active_day: {e}")
             try:
-                res = connection.execute(text("""
-                    WITH r AS (SELECT p.politician_id i, p.name n, COUNT(v.vote_id) c, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) rnk FROM votes v JOIN politicians p ON v.politician_id = p.politician_id GROUP BY p.politician_id, p.name)
-                    SELECT i, n, c FROM r WHERE rnk = 1;
-                """)).fetchall()
+                res = connection.execute(text("WITH r AS (SELECT p.politician_id i, p.name n, COUNT(v.vote_id) c, RANK() OVER (ORDER BY COUNT(v.vote_id) DESC) rnk FROM votes v JOIN politicians p ON v.politician_id = p.politician_id GROUP BY p.politician_id, p.name) SELECT i, n, c FROM r WHERE rnk = 1;")).fetchall()
                 if res: metrics["most_described_politician"] = ", ".join([f'<a href="https://use.soap.fyi/politician/{i}">{n}</a> ({c:,} submissions)' for i, n, c in res])
             except Exception as e: app.logger.error(f"Error fetching most_described_politician: {e}")
             try:
-                res = connection.execute(text("""
-                    WITH s AS (SELECT p.politician_id i, p.name n, (SUM(w.sentiment_score)/COUNT(v.vote_id)) sc, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) DESC) r_hi, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) ASC) r_lo FROM votes v JOIN words w ON v.word_id=w.word_id JOIN politicians p ON v.politician_id=p.politician_id WHERE w.sentiment_score IS NOT NULL GROUP BY p.politician_id, p.name HAVING COUNT(v.vote_id) >= :min_votes)
-                    SELECT i, n, sc, r_hi, r_lo FROM s WHERE r_hi=1 OR r_lo=1;
-                """), {'min_votes': MIN_VOTES_FOR_RATING}).fetchall()
+                res = connection.execute(text("WITH s AS (SELECT p.politician_id i, p.name n, (SUM(w.sentiment_score)/COUNT(v.vote_id)) sc, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) DESC) r_hi, RANK() OVER (ORDER BY (SUM(w.sentiment_score)/COUNT(v.vote_id)) ASC) r_lo FROM votes v JOIN words w ON v.word_id=w.word_id JOIN politicians p ON v.politician_id=p.politician_id WHERE w.sentiment_score IS NOT NULL GROUP BY p.politician_id, p.name HAVING COUNT(v.vote_id) >= :min_votes) SELECT i, n, sc, r_hi, r_lo FROM s WHERE r_hi=1 OR r_lo=1;"), {'min_votes': MIN_VOTES_FOR_RATING}).fetchall()
                 if res:
                     hi_rated = [f'<a href="https://use.soap.fyi/politician/{r.i}">{r.n}</a> ({(((r.sc/2.0)+0.5)*100.0):.1f}%)' for r in res if r.r_hi==1]
                     lo_rated = [f'<a href="https://use.soap.fyi/politician/{r.i}">{r.n}</a> ({(((r.sc/2.0)+0.5)*100.0):.1f}%)' for r in res if r.r_lo==1]
@@ -497,16 +401,13 @@ def fetch_dataset_metrics(_engine):
                 """)
                 res = connection.execute(query_all_time).fetchall()
                 if res:
-                    # Fetch all words with their sentiment scores once
                     word_sentiments_query = text("SELECT word, sentiment_score FROM words WHERE sentiment_score IS NOT NULL")
                     word_sentiments_list = connection.execute(word_sentiments_query).fetchall()
                     word_sentiments = {r.word: r.sentiment_score for r in word_sentiments_list}
-
                     formatted_results = [f"{row.word.capitalize()} ({word_sentiments.get(row.word, 0):+.2f}): {row.politicians_breakdown}" for row in res]
                     metrics["most_submitted_word"] = "; ".join(formatted_results)
             except Exception as e: app.logger.error(f"Error fetching most_submitted_word: {e}")
-            # --- END: Most Submitted Word (All Time) ---
-
+            
             # --- START: Most Submitted Word (Last 7 Days) ---
             try:
                 query_last_7_days = text("""
@@ -531,27 +432,17 @@ def fetch_dataset_metrics(_engine):
                 """)
                 res = connection.execute(query_last_7_days).fetchall()
                 if res:
-                    # Fetch all words with their sentiment scores once
                     word_sentiments_query = text("SELECT word, sentiment_score FROM words WHERE sentiment_score IS NOT NULL")
                     word_sentiments_list = connection.execute(word_sentiments_query).fetchall()
                     word_sentiments = {r.word: r.sentiment_score for r in word_sentiments_list}
-
                     formatted_results = [f"{row.word.capitalize()} ({word_sentiments.get(row.word, 0):+.2f}): {row.politicians_breakdown}" for row in res]
                     metrics["most_submitted_word_last_7_days"] = "; ".join(formatted_results)
-                else:
-                    metrics["most_submitted_word_last_7_days"] = "No submissions in last 7 days"
+                else: metrics["most_submitted_word_last_7_days"] = "No submissions in last 7 days"
             except Exception as e: app.logger.error(f"Error fetching most_submitted_word_last_7_days: {e}")
-            # --- END: Most Submitted Word (Last 7 Days) ---
-
-            # --- START: Most Positive/Negative Word Attribution (with counts) ---
+            
+            # --- START: Most Positive/Negative Word Attribution ---
             try:
-                extreme_words_query = text("""
-                    SELECT word, sentiment_score FROM words WHERE sentiment_score IS NOT NULL AND (
-                        sentiment_score = (SELECT MAX(sentiment_score) FROM words WHERE sentiment_score IS NOT NULL)
-                        OR
-                        sentiment_score = (SELECT MIN(sentiment_score) FROM words WHERE sentiment_score IS NOT NULL)
-                    );
-                """)
+                extreme_words_query = text("SELECT word, sentiment_score FROM words WHERE sentiment_score IS NOT NULL AND (sentiment_score = (SELECT MAX(sentiment_score) FROM words WHERE sentiment_score IS NOT NULL) OR sentiment_score = (SELECT MIN(sentiment_score) FROM words WHERE sentiment_score IS NOT NULL));")
                 extreme_words_res = connection.execute(extreme_words_query).fetchall()
                 if extreme_words_res:
                     all_scores = [w.sentiment_score for w in extreme_words_res]
@@ -561,38 +452,23 @@ def fetch_dataset_metrics(_engine):
                     all_extreme_words_list = list(positive_words | negative_words)
                     
                     if all_extreme_words_list:
-                        attribution_query = text("""
-                            SELECT w.word, p.politician_id, p.name as politician_name, COUNT(v.vote_id) as word_count
-                            FROM votes v
-                            JOIN politicians p ON v.politician_id = p.politician_id
-                            JOIN words w ON v.word_id = w.word_id
-                            WHERE w.word IN :word_list
-                            GROUP BY w.word, p.politician_id, p.name
-                            ORDER BY w.word, word_count DESC, p.name
-                        """)
+                        attribution_query = text("SELECT w.word, p.politician_id, p.name as politician_name, COUNT(v.vote_id) as word_count FROM votes v JOIN politicians p ON v.politician_id = p.politician_id JOIN words w ON v.word_id = w.word_id WHERE w.word IN :word_list GROUP BY w.word, p.politician_id, p.name ORDER BY w.word, word_count DESC, p.name")
                         attribution_df = pd.read_sql(attribution_query, connection, params={'word_list': tuple(all_extreme_words_list)})
-
                         pos_attributions = []
                         for word in sorted(list(positive_words)):
                             politicians_df_for_word = attribution_df[attribution_df['word'] == word]
                             if not politicians_df_for_word.empty:
                                 details = [f'<a href="https://use.soap.fyi/politician/{row.politician_id}">{row.politician_name}</a> ({row.word_count})' for row in politicians_df_for_word.head(3).itertuples()]
                                 pos_attributions.append(f"{word.capitalize()} ({max_score:+.2f}): {', '.join(details)}")
-                        if pos_attributions:
-                            metrics["most_positive_word_attribution"] = "; ".join(pos_attributions)
-
+                        if pos_attributions: metrics["most_positive_word_attribution"] = "; ".join(pos_attributions)
                         neg_attributions = []
                         for word in sorted(list(negative_words)):
                             politicians_df_for_word = attribution_df[attribution_df['word'] == word]
                             if not politicians_df_for_word.empty:
                                 details = [f'<a href="https://use.soap.fyi/politician/{row.politician_id}">{row.politician_name}</a> ({row.word_count})' for row in politicians_df_for_word.head(3).itertuples()]
                                 neg_attributions.append(f"{word.capitalize()} ({min_score:+.2f}): {', '.join(details)}")
-                        if neg_attributions:
-                            metrics["most_negative_word_attribution"] = "; ".join(neg_attributions)
-
-            except Exception as e:
-                app.logger.error(f"Error fetching extreme word attribution: {e}")
-            # --- END: Most Positive/Negative Word Attribution (with counts) ---
+                        if neg_attributions: metrics["most_negative_word_attribution"] = "; ".join(neg_attributions)
+            except Exception as e: app.logger.error(f"Error fetching extreme word attribution: {e}")
 
     except Exception as e:
         app.logger.error(f"Major error in fetch_dataset_metrics: {e}")
@@ -620,7 +496,6 @@ def fetch_feed_updates(_engine, limit=100):
                 df['Word'] = df['Word'].astype(str).apply(lambda x: ' '.join(s.capitalize() for s in x.split()))
             if 'Sentiment' in df.columns:
                 df['Sentiment'] = pd.to_numeric(df['Sentiment'], errors='coerce')
-            
             for col in df_cols:
                 if col not in df.columns: df[col] = pd.NA
             df = df[df_cols]
@@ -632,20 +507,10 @@ def fetch_feed_updates(_engine, limit=100):
         return pd.DataFrame(columns=df_cols)
 
 def fetch_top_weekly_word_for_politician(_engine, politician_id):
-    # Define the new column names as requested.
     df_cols = ["Week Start", "Top Word", "Top Word Votes", "All Votes"]
-
-    if not _engine or politician_id is None:
-        return pd.DataFrame(columns=df_cols)
-
-    # Ensure politician_id is valid
-    try:
-        pid = int(politician_id)
-    except ValueError:
-        app.logger.error(f"Invalid politician_id for top weekly word: {politician_id}")
-        return pd.DataFrame(columns=df_cols)
-
-    # SAFE: SQL string is static and not built with f-strings
+    if not _engine or politician_id is None: return pd.DataFrame(columns=df_cols)
+    try: pid = int(politician_id)
+    except ValueError: return pd.DataFrame(columns=df_cols)
     query = text("""
         WITH WeeklyWordCounts AS (
             SELECT
@@ -691,45 +556,19 @@ def fetch_top_weekly_word_for_politician(_engine, politician_id):
         WHERE rww.rn = 1
         ORDER BY rww.week_start_date DESC;
     """)
-
     try:
-        # Run the query safely with bound parameters
         with _engine.connect() as connection:
             df = pd.read_sql(query, connection, params={'politician_id_param': pid})
-
-        if df.empty:
-            return pd.DataFrame(columns=df_cols)
-
-        # Clean up and normalize dataframe columns
-        if "Week Start" in df.columns:
-            df["Week Start"] = pd.to_datetime(df["Week Start"])
-
-        if "Top Word" in df.columns:
-            df["Top Word"] = (
-                df["Top Word"]
-                .astype(str)
-                .apply(lambda x: " ".join(s.capitalize() for s in x.split()))
-            )
-
+        if df.empty: return pd.DataFrame(columns=df_cols)
+        if "Week Start" in df.columns: df["Week Start"] = pd.to_datetime(df["Week Start"])
+        if "Top Word" in df.columns: df["Top Word"] = (df["Top Word"].astype(str).apply(lambda x: " ".join(s.capitalize() for s in x.split())))
         for col in ["Top Word Votes", "All Votes"]:
-            if col in df.columns:
-                df[col] = (
-                    pd.to_numeric(df[col], errors='coerce')
-                    .fillna(0)
-                    .astype(int)
-                )
-
-        # Ensure all expected columns are present
+            if col in df.columns: df[col] = (pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int))
         for col in df_cols:
-            if col not in df.columns:
-                df[col] = pd.NA
-
+            if col not in df.columns: df[col] = pd.NA
         return df[df_cols]
-
     except Exception as e:
-        app.logger.error(
-            f"Error fetching top weekly word for politician_id {pid}: {e}"
-        )
+        app.logger.error(f"Error fetching top weekly word for politician_id {pid}: {e}")
         return pd.DataFrame(columns=df_cols)
 
 # --- Plotting Functions ---
@@ -798,25 +637,14 @@ def plot_multiline_chart_to_image(df, x_col, y_col, group_col, title, xlabel, yl
     plt.close(fig); return img_buf
 
 def plot_daily_activity_to_image(df):
-    """Generates a dual-axis grouped bar chart for daily submissions, politician additions, and new word additions for the last 30 days."""
-    import matplotlib.dates as mdates
-    if df.empty or ('submission_count' not in df.columns and 'addition_count' not in df.columns):
-        return None
-
-    # Filter for the last 30 days directly.
+    if df.empty or ('submission_count' not in df.columns and 'addition_count' not in df.columns): return None
     df_filtered = df[df['activity_date'] >= (datetime.datetime.now() - datetime.timedelta(days=30))]
-    if df_filtered.empty:
-        return None # Return if there is no data in the last 30 days.
-
+    if df_filtered.empty: return None
     fig, ax1 = plt.subplots(figsize=(15, 7))
     bar_width = 0.25
     dates = df_filtered['activity_date']
     x_pos = mdates.date2num(dates)
-
-    color1 = '#A997DF'  # Light Purple
-    color2 = '#DC6E79'  # (220, 110, 121)
-    color3 = '#46853E'  # (70, 133, 62)
-
+    color1 = '#A997DF'; color2 = '#DC6E79'; color3 = '#46853E'
     ax1.set_ylabel('Daily Votes', color=color1, fontsize=12, weight='bold')
     ax1.bar(x_pos - bar_width, df_filtered['submission_count'], width=bar_width, color=color1, label='Votes Submitted')
     ax1.tick_params(axis='y', labelcolor=color1)
@@ -824,37 +652,25 @@ def plot_daily_activity_to_image(df):
     ax1.set_ylim(0, max(10, max_submissions * 1.1))
     ax1.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax1.spines['top'].set_visible(False)
-
     ax2 = ax1.twinx()
-    
     ax2.set_ylabel('Daily Additions', fontsize=12, weight='bold')
-
     ax2.bar(x_pos, df_filtered['addition_count'], width=bar_width, color=color2, label='New Politicians Added')
     ax2.bar(x_pos + bar_width, df_filtered['new_word_count'], width=bar_width, color=color3, label='New Words Added')
-    
     ax2.tick_params(axis='y')
     max_additions = df_filtered['addition_count'].max()
     max_new_words = df_filtered['new_word_count'].max()
     ax2.set_ylim(0, max(5, max(max_additions, max_new_words) * 1.2))
     ax2.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax2.spines['top'].set_visible(False)
-
     ax1.set_title('Daily Activity: Submissions & Additions (Last 30 Days)', fontsize=16, weight='bold', pad=20)
     ax1.set_xlabel('Date', fontsize=12)
     ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
     fig.autofmt_xdate(rotation=30, ha='right')
     ax1.grid(True, axis='y', linestyle='--', alpha=0.7)
-
-    lines, labels = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
+    lines, labels = ax1.get_legend_handles_labels(); lines2, labels2 = ax2.get_legend_handles_labels()
     ax2.legend(lines + lines2, labels + labels2, loc='upper left')
-
-    plt.tight_layout()
-    img_buf = BytesIO()
-    fig.savefig(img_buf, format="png", dpi=100, bbox_inches='tight')
-    img_buf.seek(0)
-    plt.close(fig)
-    return img_buf
+    plt.tight_layout(); img_buf = BytesIO(); fig.savefig(img_buf, format="png", dpi=100, bbox_inches='tight'); img_buf.seek(0)
+    plt.close(fig); return img_buf
 
 def plot_comparison_heatmap_to_image(comparison_matrix_df, title="Comparison Matrix", cbar_label="Cosine Similarity"):
     if comparison_matrix_df.empty or len(comparison_matrix_df) < 2: return None
@@ -878,14 +694,11 @@ def get_image_as_base64(img_buf):
         return base64.b64encode(img_buf.read()).decode('utf-8')
     return None
 
-# --- Main Dashboard Route ---
-@app.route('/')
-def dashboard():
+# --- Main Logic Function (Refactored to accept tab as argument) ---
+def render_tab_content(active_tab):
     if not engine:
         # Pass engine_available for the template to check (e.g., in base.html)
         return render_template('index.html', engine_available=False, active_tab='overview') 
-
-    active_tab = request.args.get('tab', 'overview')
 
     politicians_list_df = fetch_politicians_list(engine)
 
@@ -934,19 +747,14 @@ def dashboard():
             
             df_scores_raw = fetch_raw_sentiments_for_multiple_politicians(engine, ids_for_query)
             if not df_scores_raw.empty:
-                # Calculate median sentiment score for each politician
                 median_scores = df_scores_raw.groupby('politician_name')['sentiment_score'].median()
-                # Get politician names sorted by median score in descending order
                 sorted_names_by_median = median_scores.sort_values(ascending=False).index.tolist()
-                
-                # Reorder the 'politician_name' column based on the median score
                 df_scores_raw['politician_name'] = pd.Categorical(
                     df_scores_raw['politician_name'], 
                     categories=sorted_names_by_median, 
                     ordered=True
                 )
                 df_scores_raw.sort_values('politician_name', inplace=True)
-                
                 histogram_buf = plot_multi_sentiment_histograms_to_image(df_scores_raw, num_bins=12)
                 lookup_tab_data['histogram_img_base64'] = get_image_as_base64(histogram_buf)
 
@@ -1028,7 +836,6 @@ def dashboard():
             activity_graph_buf = plot_daily_activity_to_image(daily_activity_df)
             activity_graph_img_base64 = get_image_as_base64(activity_graph_buf)
         
-        # Fetch last 100 items regardless of date
         feed_df = fetch_feed_updates(engine, limit=100)
         
         feed_list_for_template = []
@@ -1049,6 +856,30 @@ def dashboard():
                            feed_data=feed_data_dict,
                            engine_available=bool(engine)
                           )
+
+# --- Routes ---
+
+@app.route('/')
+def index_redirect():
+    """Redirect root to /overview"""
+    return redirect(url_for('route_overview'))
+
+@app.route('/overview')
+def route_overview():
+    return render_tab_content('overview')
+
+@app.route('/lookup')
+def route_lookup():
+    return render_tab_content('lookup')
+
+@app.route('/compare')
+def route_compare():
+    return render_tab_content('compare')
+
+@app.route('/feed')
+def route_feed():
+    return render_tab_content('feed')
+
 # --- Favicon & 404 Routes ---
 @app.route('/favicon.ico')
 def favicon():
@@ -1060,7 +891,6 @@ def robots_txt():
 
 @app.errorhandler(404)
 def page_not_found(e):
-    # Pass engine_available for template, if base.html expects it
     return render_template('404.html', engine_available=bool(engine)), 404
 
 @app.route('/healthz')
@@ -1070,7 +900,7 @@ def health_check():
 # --- Main Entry Point ---
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    if not debug_mode and DEPLOY_ENV == 'DEVELOPMENT': # This seems like a conflicting logic, removed for simplicity
+    if not debug_mode and DEPLOY_ENV == 'DEVELOPMENT':
         debug_mode = True
         app.logger.info("Forcing debug mode ON for local 'python3 app.py' execution as FLASK_ENV was not 'development'.")
     port_num = int(os.environ.get('PORT', 5001))
